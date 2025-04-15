@@ -9,6 +9,7 @@ interface StockData {
   low: string;
   close: string;
   volume: string;
+  summary?: string[];
 }
 
 const App: React.FC = () => {

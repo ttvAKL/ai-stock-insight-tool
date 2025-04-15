@@ -1,40 +1,23 @@
 const express = require('express');
-const axios = require('axios');
+const axios = require('axios'); // axios for calling APIs (not yfinance since it's Python)
+const url = `http://127.0.0.1:5000/api/stock/${symbol}`;
+const response = await axios.get(url);
+
+
 const app = express();
 const PORT = 3000;
 
-app.use(express.static('client')); // Serve the static HTML file
+app.use(express.static('frontend')); // Serve static HTML
 
 app.get('/api/stock/:symbol', async (req, res) => {
   const symbol = req.params.symbol;
-  const AlphaVantageApi = 'https://www.alphavantage.co/query';
-  const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&apikey=${AlphaVantageApi}`;
-  
+  const url = `http://127.0.0.1:5000/api/stock/${symbol}`;  // This should call your Flask API
+
   try {
     const response = await axios.get(url);
-    const data = response.data;
-    
-    const timeSeries = data['Time Series (Daily)'];
-    if (!timeSeries) {
-      return res.status(404).json({ error: `No data found for symbol: ${symbol}` });
-    }
-
-    const sortedDates = Object.keys(timeSeries).sort((a, b) => new Date(b) - new Date(a));
-    const latestDate = sortedDates[0];
-    const latestData = timeSeries[latestDate];
-
-    res.json({
-      symbol: symbol,
-      date: latestDate,
-      open: latestData['1. open'],
-      high: latestData['2. high'],
-      low: latestData['3. low'],
-      close: latestData['4. close'],
-      volume: latestData['5. volume'],
-    });
+    res.json(response.data);
   } catch (error) {
-    console.error(error);
-    res.json({ error: 'Error fetching data for ' + symbol });
+    res.status(500).json({ error: 'Error fetching stock data' });
   }
 });
 
