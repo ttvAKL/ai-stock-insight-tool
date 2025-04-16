@@ -21,24 +21,6 @@ const getDisplayText = (key: string): string => {
   }
 };
 
-const getExplanation = (key: string): string => {
-  switch (key) {
-    case 'pays_dividends':
-      return 'Determined by analyzing the dividendYield value.';
-    case 'high_pe':
-    case 'low_pe':
-      return 'Determined by analyzing the trailingPE value.';
-    case 'high_beta':
-    case 'low_beta':
-      return 'Determined by analyzing the beta value.';
-    case 'high_margin':
-    case 'low_margin':
-      return 'Determined by analyzing the profitMargins value.';
-    default:
-      return 'Based on available financial indicators.';
-  }
-};
-
 interface StockCardProps {
   data: {
     symbol: string;
@@ -48,13 +30,29 @@ interface StockCardProps {
     low: string;
     close: string;
     volume: string;
-    summary?: string[]; // Now these are backend keys like 'high_pe', 'low_margin'
+    summary?: string[];
+    source?: 'user' | 'recommended';
   };
+  onRemove?: (symbol: string) => void;
 }
 
-const StockCard: React.FC<StockCardProps> = ({ data }) => {
+const StockCard: React.FC<StockCardProps> = ({ data, onRemove }) => {
   return (
-    <div className="mt-8 p-6 max-w-md w-full bg-white rounded-lg shadow-lg">
+    <div className="relative mt-8 p-6 max-w-md w-full bg-white rounded-lg shadow-lg group/card">
+      {data.source === 'recommended' && (
+        <span className="absolute top-0 left-0 bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded">
+          Recommended
+        </span>
+      )}
+      {onRemove && (
+        <button
+          className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 font-bold text-sm opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 focus:outline-none focus:ring-0"
+          onClick={() => onRemove(data.symbol)}
+          style={{ background: 'transparent', border: 'none', outline: 'none', boxShadow: 'none' }}
+        >
+          ✕
+        </button>
+      )}
       <h2 className="text-2xl font-semibold mb-4">{data.symbol} - {data.date}</h2>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
@@ -70,11 +68,8 @@ const StockCard: React.FC<StockCardProps> = ({ data }) => {
           <h3 className="text-lg font-semibold mb-2">Stock Summary</h3>
           <ul className="list-disc pl-5 text-gray-700 space-y-2">
             {data.summary.map((key, index) => (
-              <li key={index} className="relative group">
+              <li key={index} className="relative group/summary w-fit">
                 {getDisplayText(key)}
-                <div className="absolute left-0 w-64 bg-gray-800 text-white text-sm p-2 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-                  {getExplanation(key)}
-                </div>
               </li>
             ))}
           </ul>
