@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface Question {
@@ -33,6 +33,13 @@ const ProfileSetup: React.FC = () => {
   const navigate = useNavigate();
   const [answers, setAnswers] = useState<string[]>(Array(questions.length).fill(''));
   const [result, setResult] = useState<string | null>(localStorage.getItem('investorProfile'));
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+      const handleResize = () => setWindowWidth(window.innerWidth);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
   const handleChange = (index: number, value: string) => {
     const newAnswers = [...answers];
@@ -71,7 +78,8 @@ const ProfileSetup: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center bg-gray-100 p-6" style={{ width: `${document.documentElement.clientWidth}px` }}>
+    <div className="min-h-screen w-full max-w-7xl mx-auto flex flex-col items-center justify-center bg-gray-100 p-6"
+    style={{ minWidth: `${Math.min(windowWidth, 1536)}px` }}>
       <div className="w-full max-w-4xl">
         <h1 className="text-3xl font-bold mb-6 text-center">Investor Profile Quiz</h1>
         {result ? (

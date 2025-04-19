@@ -1,8 +1,8 @@
-console.log('[TOP LEVEL] Is this Home.tsx actually being used?');
-
 import React, { useEffect, useState } from 'react';
 import StockCard from './StockCard';
 import SearchBar from './SearchBar';
+
+
 
 interface StockData {
   symbol: string;
@@ -30,23 +30,25 @@ const getRecommendedTickers = (profile: string): string[] => {
 };
 
 const Home: React.FC = () => {
-  console.log('[DEBUG] Home.tsx rendered');
+  
   const [stocks, setStocks] = useState<StockData[]>([]);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
-    console.log('[useEffect] running...');
+      const handleResize = () => setWindowWidth(window.innerWidth);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+  useEffect(() => {
     const savedStocks = localStorage.getItem('savedStocks');
-    console.log('[useEffect] savedStocks:', savedStocks);
   
     if (savedStocks && !localStorage.getItem('investorProfileJustSet')) {
       setStocks(JSON.parse(savedStocks));
-      console.log('[useEffect] Loaded stocks from localStorage');
     } else {
       const storedProfile = localStorage.getItem('investorProfile');
-      console.log('[useEffect] storedProfile:', storedProfile);
       
       const recommendedTickers = storedProfile ? getRecommendedTickers(storedProfile) : ['AAPL', 'MSFT', 'TSLA'];
-      console.log('[useEffect] recommendedTickers:', recommendedTickers);
   
       const fetchInitialData = async () => {
         const allStocks: StockData[] = JSON.parse(savedStocks || '[]');
@@ -102,18 +104,18 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-12 flex flex-col items-center">
+    <div className="min-h-screen bg-gray-100 p-12 flex flex-col justify-start items-center">
       {/* Header Section */}
-      <div className="w-full max-w-4xl text-center">
+      <div className="w-full max-w-7xl text-center">
         <h1 className="text-4xl font-bold mb-8">AI Stock Insight Tool</h1>
         <SearchBar onSearch={handleSearch} />
       </div>
 
       {/* Stock Card Section */}
-      <div className="mt-12 w-full flex justify-center"
-           style={{ width: `${document.documentElement.clientWidth-100}px` }}>
+      <div className="mt-12 w-full min-w-1000px max-w-8xl px-4 flex justify-center"
+      style={{ minWidth: `${windowWidth-95}px` }}>
         {stocks.length === 0 ? (
-          <div className="h-52 flex items-center justify-center w-full text-gray-500 text-lg font-medium">
+          <div className="h-52 flex items-center justify-center text-gray-500 text-lg font-medium">
             Search to add Stock Cards
           </div>
         ) : (
