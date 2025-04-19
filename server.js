@@ -1,17 +1,19 @@
-const express = require('express');
-const axios = require('axios'); // axios for calling APIs (not yfinance since it's Python)
-const url = `http://127.0.0.1:5000/api/stock/${symbol}`;
-const response = await axios.get(url);
+import express from 'express';
+import axios from 'axios';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3000;
 
-app.use(express.static('frontend')); // Serve static HTML
+app.use(express.static(path.join(__dirname, 'frontend')));
 
 app.get('/api/stock/:symbol', async (req, res) => {
   const symbol = req.params.symbol;
-  const url = `http://127.0.0.1:5000/api/stock/${symbol}`;  // This should call your Flask API
+  const url = `http://127.0.0.1:3000/api/stock/${symbol}`;
 
   try {
     const response = await axios.get(url);

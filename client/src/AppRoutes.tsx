@@ -4,6 +4,7 @@ import Home from './Home';
 import ProfileSetup from './ProfileSetup';
 import OnboardingWelcome from './OnboardingWelcome';
 import OnboardingComplete from './OnboardingComplete';
+import StockDetail from './StockDetail';
 
 const AppRoutes: React.FC = () => {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ const AppRoutes: React.FC = () => {
       <Route path='/profile' element={<ProfileSetup />} />
       <Route path='/onboarding' element={<OnboardingWelcome />} />
       <Route path='/onboarding/complete' element={<OnboardingComplete />} />
+      <Route path='/stock/:symbol' element={<StockDetail />} />
     </Routes>
   );
 };
