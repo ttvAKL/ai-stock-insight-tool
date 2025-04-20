@@ -9,7 +9,6 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { getSummaryText } from './utils/summaryText';
 
 interface StockData {
   symbol: string;
@@ -225,7 +224,7 @@ const getMonthlyTicks = (history: { date: string }[]) => {
           <h2 className="text-xl font-semibold mb-2">Key Insights</h2>
           <ul className="list-disc list-inside text-gray-700 space-y-1">
             {stock.summary.map((point, idx) => (
-              <li key={idx}>{getSummaryText(point)}</li>
+              <li key={idx}>{point}</li>
             ))}
           </ul>
         </div>
