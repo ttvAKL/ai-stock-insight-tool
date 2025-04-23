@@ -48,11 +48,11 @@ def fetch_stock_data(symbol):
 
         category_tags = []
         if 'pays_dividends' in fin_summary:
-            category_tags.append("Dividend Lovers")
+            category_tags.append("Dividend Payers")
         if 'high_pe' in fin_summary or 'high_beta' in fin_summary:
-            category_tags.append("High Growth")
+            category_tags.append("Growth Picks")
         if 'low_beta' in fin_summary or 'low_pe' in fin_summary:
-            category_tags.append("Safe Picks")
+            category_tags.append("Blue Chips")
 
         history = [
             {"date": d, "close": round(float(time_series[d]["4. close"]), 2)}
