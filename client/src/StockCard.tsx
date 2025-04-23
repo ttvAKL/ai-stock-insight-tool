@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getSummaryText } from './utils/summaryText';
 
@@ -15,36 +15,67 @@ interface StockCardProps {
     source?: 'user' | 'recommended';
     categoryTags?: string[];
   };
-  onRemove?: (symbol: string) => void;
+  isInWatchlist?: boolean;
+  onToggleWatchlist?: () => void;
 }
 
-const StockCard: React.FC<StockCardProps> = ({ data, onRemove }) => {
+const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatchlist }) => {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full bg-white rounded-lg shadow-lg overflow-hidden transition-all duration-300 ease-in-out max-h-[330px] hover:max-h-[1000px] hover:z-10 group/card flex flex-col justify-between">
-      {onRemove && (
+    <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[400px] bg-white rounded-lg shadow-lg group/card">
+      {onToggleWatchlist && (
         <button
-          className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 font-bold text-sm opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 focus:outline-none focus:ring-0"
           onClick={(e) => {
             e.stopPropagation();
-            onRemove(data.symbol);
+            onToggleWatchlist();
           }}
-          style={{ background: 'transparent', border: 'none', outline: 'none', boxShadow: 'none' }}
+          className="absolute top-2 right-2 opacity-0 group-hover/card:opacity-100 transition-opacity duration-200"
+          style={{
+            background: 'transparent',
+            outline: 'none',
+            boxShadow: 'none',
+            border: 'none'
+          }}
+          onMouseDown={(e) => e.preventDefault()}
         >
-          ✕
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill={isInWatchlist ? "currentColor" : "none"}
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            className="w-5 h-5 text-yellow-500 hover:text-yellow-500"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
+            />
+          </svg>
         </button>
       )}
-      {(data.source === 'recommended' || (data.categoryTags && data.categoryTags.length > 0)) && (
+      {(data.categoryTags && data.categoryTags.length > 0) && (
         <div className="mb-4 flex flex-wrap gap-2">
-          {data.source === 'recommended' && (
-            <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full font-medium">
-              Recommended
+          {data.categoryTags?.map((tag, index) => (
+            <span
+              key={index}
+              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full font-medium"
+            >
+              {tag}
             </span>
-          )}
+          ))}
         </div>
       )}
       <Link to={`/stock/${data.symbol}`} className="block h-full">
-        <h2 className="text-2xl font-semibold mb-4">{data.symbol} - {data.date}</h2>
-
+        <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+          {data.symbol} - {data.date}
+          {data.source === 'recommended' && (
+            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+              Recommended
+            </span>
+          )}
+        </h2>
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="flex flex-col"><span className="font-semibold">Open:</span><span>{data.open}</span></div>
           <div className="flex flex-col"><span className="font-semibold">High:</span><span>{data.high}</span></div>
@@ -52,23 +83,40 @@ const StockCard: React.FC<StockCardProps> = ({ data, onRemove }) => {
           <div className="flex flex-col"><span className="font-semibold">Close:</span><span>{data.close}</span></div>
           <div className="flex flex-col"><span className="font-semibold">Volume:</span><span>{data.volume}</span></div>
         </div>
-
         {data.summary && data.summary.length > 0 && (
           <div className="mt-4">
-            <h3 className="text-lg font-semibold mb-2">Stock Summary</h3>
-            <ul className="list-disc pl-5 text-gray-700 space-y-2 text-sm">
-              {data.summary.map((key, index) => (
-                <li key={index} className="relative group/summary w-fit">
-                  {getSummaryText(key)}
-                </li>
-              ))}
-            </ul>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setExpanded(!expanded);
+              }}
+              className="text-lg font-semibold mb-2 flex items-center gap-2"
+              style={{
+                background: 'transparent',
+                outline: 'none',
+                boxShadow: 'none',
+                border: 'none',
+                paddingLeft: 0
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              Stock Summary
+              <span className={`transform transition-transform duration-200 ${expanded ? 'rotate-90' : 'rotate-0'}`}>
+                ▶
+              </span>
+            </button>
+            {expanded && (
+              <ul className="list-disc pl-5 text-gray-700 space-y-2">
+                {data.summary.map((key, index) => (
+                  <li key={index} className="relative group/summary w-fit">
+                    {getSummaryText(key)}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </Link>
-
-      {/* Fade-out gradient overlay */}
-      <div className="pointer-events-none absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white/80 via-white/60 to-transparent opacity-90 group-hover/card:opacity-0 transition-opacity duration-300" />
     </div>
   );
 };
