@@ -13,26 +13,28 @@ import {
 interface StockData {
   symbol: string;
   name?: string;
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
+  sector?: string;
   market_cap?: number;
   pe_ratio?: number;
   dividend_yield?: number;
-  sector?: string;
-  summary?: string[];
-  history?: { date: string; close: number }[];
+  ai_summary?: string[];
 }
+
+interface HistoryPoint {
+  date: string;
+  close: number;
+}
+
+const ranges = ['1d', '5d', '1mo', '6mo', '1y'];
 
 const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockData | null>(null);
   const [error, setError] = useState('');
   const [selectedRange, setSelectedRange] = useState('1mo');
+  const [historyCache, setHistoryCache] = useState<{ [range: string]: HistoryPoint[] }>({});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -41,103 +43,99 @@ const StockDetail: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchStock = async () => {
-      const url = `http://127.0.0.1:3000/api/stock/${symbol}?range=${selectedRange}&t=${Date.now()}`;
-
+    const fetchAllRanges = async () => {
       try {
-        const res = await fetch(url, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          cache: 'no-store',
-        });
-        const data = await res.json();
+        const baseUrl = `/api/stock/${symbol}`;
+        const fetchedHistories: { [range: string]: HistoryPoint[] } = {};
+        let stockSet = false;
 
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setStock(data);
+        for (const range of ranges) {
+          const res = await fetch(`${baseUrl}/${range}`);
+          const data = await res.json();
+          if (!data.error) {
+            if (!stockSet) {
+              console.log("🧠 AI Summary Received:", data.ai_summary);
+              setStock({
+                symbol: data.symbol,
+                name: data.name,
+                sector: data.sector,
+                market_cap: data.market_cap,
+                pe_ratio: data.pe_ratio,
+                dividend_yield: data.dividend_yield,
+                ai_summary: data.ai_summary
+              });
+              stockSet = true;
+            }
+            fetchedHistories[range] = data.history || [];
+          }
         }
+
+        setHistoryCache(fetchedHistories);
       } catch {
         setError('Failed to fetch stock data.');
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    fetchStock();
-  }, [symbol, selectedRange]);
+    if (symbol) {
+      fetchAllRanges();
+    }
+  }, [symbol]);
 
   const handleRangeChange = (range: string) => {
     setSelectedRange(range);
   };
 
   const formatXAxis = (tick: string) => {
-  const date = new Date(Date.parse(tick));
-  switch (selectedRange) {
-    case '1d': {
-      const time = tick.slice(11, 16); // Extract HH:mm from ISO string
-      return time;
+    const date = new Date(Date.parse(tick));
+    switch (selectedRange) {
+      case '1d': return tick.slice(11, 16);
+      case '5d':
+      case '1mo': return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+      case '6mo':
+      case '1y': return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;
+      default: return tick;
     }
-    case '5d':
-    case '1mo': {
-      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const mo = monthNames[date.getUTCMonth()];
-      const d = date.getUTCDate();
-      return `${mo} ${d}`;
-    }
-    case '6mo':
-    case '1y': {
-      const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      return monthNames[date.getUTCMonth()];
-    }
-    default:
-      return tick;
-  }
-};
+  };
 
-const getHourlyTicks = (history: { date: string }[]) => {
-  const seen = new Set<string>();
-  const ticks: string[] = [];
-  history.forEach(({ date }) => {
-    const key = date.slice(0, 13); // Keep as-is to preserve UTC time
-    if (!seen.has(key)) {
-      seen.add(key);
-      ticks.push(date);
-    }
-  });
-  return ticks;
-};
+  const filterXAxisTicks = (history: HistoryPoint[]) => {
+    const seenDays = new Set<string>();
+    return history
+      .filter(({ date }) => {
+        const day = date.slice(0, 10); // YYYY-MM-DD
+        if (!seenDays.has(day)) {
+          seenDays.add(day);
+          return true;
+        }
+        return false;
+      })
+      .map(({ date }) => date);
+  };
 
-const getDailyTicks = (history: { date: string }[]) => {
-  const seen = new Set<string>();
-  const ticks: string[] = [];
-  history.forEach(({ date }) => {
-    // Use the first 10 characters of the ISO string (YYYY-MM-DD)
-    const key = date.slice(0, 10);
-    if (!seen.has(key)) {
-      seen.add(key);
-      ticks.push(date);
-    }
-  });
-  return ticks;
-};
+  const filterHistoryByRange = (history: HistoryPoint[], range: string) => {
+    const now = new Date();
+    const cutoff = new Date();
 
-const getMonthlyTicks = (history: { date: string }[]) => {
-  const seen = new Set<string>();
-  const ticks: string[] = [];
-  history.forEach(({ date }) => {
-    // Use the first 7 characters of the ISO string (YYYY-MM)
-    const key = date.slice(0, 7);
-    if (!seen.has(key)) {
-      seen.add(key);
-      ticks.push(date);
+    if (range === '6mo') {
+      cutoff.setMonth(now.getMonth() - 6);
+    } else if (range === '1y') {
+      cutoff.setFullYear(now.getFullYear() - 1);
+    } else {
+      return history; // no filtering for 1d, 5d, 1mo
     }
-  });
-  return ticks;
-};
+
+    return history.filter((point) => {
+      const pointDate = new Date(point.date);
+      return pointDate >= cutoff;
+    });
+  };
 
   if (error) return <p className="text-red-500 p-4">{error}</p>;
-  if (!stock) return <p className="p-4">Loading...</p>;
+  if (isLoading || !stock) return <p className="p-4">Loading...</p>;
+
+  const rawHistory = historyCache[selectedRange] || [];
+  const history = filterHistoryByRange(rawHistory, selectedRange);
 
   return (
     <div
@@ -146,9 +144,10 @@ const getMonthlyTicks = (history: { date: string }[]) => {
     >
       <h1 className="text-3xl font-bold mb-2">{stock.name || stock.symbol}</h1>
       <p className="text-sm text-gray-500 mb-4">Sector: {stock.sector || 'N/A'}</p>
-      
+
+      {/* Range Buttons */}
       <div className="flex space-x-2 mb-4">
-        {['1d', '5d', '1mo', '6mo', '1y'].map((range) => (
+        {ranges.map((range) => (
           <button
             key={range}
             onClick={() => handleRangeChange(range)}
@@ -159,44 +158,24 @@ const getMonthlyTicks = (history: { date: string }[]) => {
         ))}
       </div>
 
+      {/* Stock Chart */}
       <div className="h-64 bg-white mb-6">
-        {stock.history && stock.history.length > 0 ? (
+        {history.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={stock.history}>
+            <LineChart data={history}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="date"
                 tickFormatter={formatXAxis}
-                ticks={
-                  selectedRange === '1d'
-                    ? getHourlyTicks(stock.history || [])
-                    : selectedRange === '5d'
-                    ? getDailyTicks(stock.history || [])
-                    : getMonthlyTicks(stock.history || [])
-                }
+                ticks={selectedRange === '1d' ? undefined : filterXAxisTicks(history)}
               />
               <YAxis domain={['auto', 'auto']} />
-              <Tooltip labelFormatter={(label) => {
-                const date = new Date(label);
-                const isShortRange = ['1d', '5d'].includes(selectedRange);
-                const options: Intl.DateTimeFormatOptions = isShortRange
-                  ? {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: false,
-                    }
-                  : {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    };
-                return date.toLocaleString(undefined, options);
-              }} />
+              <Tooltip
+                labelFormatter={(label) => {
+                  const date = new Date(label);
+                  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                }}
+              />
               <Line type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -207,24 +186,20 @@ const getMonthlyTicks = (history: { date: string }[]) => {
         )}
       </div>
 
+      {/* Stock Stats */}
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <div><strong>Date:</strong> {stock.date}</div>
-        <div><strong>Open:</strong> {stock.open}</div>
-        <div><strong>High:</strong> {stock.high}</div>
-        <div><strong>Low:</strong> {stock.low}</div>
-        <div><strong>Close:</strong> {stock.close}</div>
-        <div><strong>Volume:</strong> {stock.volume.toLocaleString()}</div>
         <div><strong>Market Cap:</strong> {stock.market_cap?.toLocaleString() || 'N/A'}</div>
         <div><strong>P/E Ratio:</strong> {stock.pe_ratio ?? 'N/A'}</div>
         <div><strong>Dividend Yield:</strong> {stock.dividend_yield ?? 'N/A'}</div>
       </div>
 
-      {stock.summary && stock.summary.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold mb-2">Key Insights</h2>
-          <ul className="list-disc list-inside text-gray-700 space-y-1">
-            {stock.summary.map((point, idx) => (
-              <li key={idx}>{point}</li>
+      {/* Key Insights */}
+      {stock.ai_summary && stock.ai_summary.length > 0 && (
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Key Insights</h2>
+          <ul className="list-disc list-inside text-gray-700 space-y-1 pl-4">
+            {stock.ai_summary.map((point, idx) => (
+              <li key={idx} className="text-sm leading-snug">{point}</li>
             ))}
           </ul>
         </div>
