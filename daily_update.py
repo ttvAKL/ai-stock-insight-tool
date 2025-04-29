@@ -84,11 +84,11 @@ def fetch_stock_data(symbol):
         return True
 
     except Exception as e:
-        print(f"💥 Error updating {symbol}: {e}")
+        print(f"Error updating {symbol}: {e}")
         return False
 
 def update_all_tickers():
-    print("\n🔄 Starting daily update job...")
+    print("\n Starting daily update job...")
 
     if not os.path.exists(TICKER_FILE):
         print(f"❌ Ticker file not found: {TICKER_FILE}")

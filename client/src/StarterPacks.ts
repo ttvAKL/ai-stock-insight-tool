@@ -6,4 +6,9 @@ const STARTER_PACKS: Record<string, string[]> = {
   'Value Stocks': ['F', 'INTC', 'WBA', 'C', 'BAC', 'GM', 'CSCO', 'TFC', 'PFG', 'VZ']
 };
 
+// Flatten all tickers into a single array (no duplicates)
+export const STARTER_TICKERS: string[] = Array.from(
+  new Set(Object.values(STARTER_PACKS).flat())
+);
+
 export default STARTER_PACKS;
