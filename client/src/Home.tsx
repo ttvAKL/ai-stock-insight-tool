@@ -63,7 +63,6 @@ const Home: React.FC = () => {
       if (activeCategory === 'Watchlist') {
         const profile = localStorage.getItem('investorProfile');
         const recommended = profile ? getRecommendedTickers(profile) : ['AAPL', 'MSFT', 'TSLA'];
-        // Merge recommended and watchlist symbols, unique
         const combined = Array.from(new Set([...recommended, ...watchlistSymbols]));
         const results: StockData[] = [];
 

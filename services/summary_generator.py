@@ -37,7 +37,6 @@ Here is the partial stock info:
 You are a professional stock market analyst. Given the detailed stock information below, produce a short, clean bullet point summary (4–5 points) for an investor.
 
 Follow this structure:
-- One line overview of the company's business.
 - 1–2 financial strengths or risks (based on PE Ratio, Beta, Profit Margin, etc).
 - Valuation or sentiment hint if any (based on data).
 - 1–2 short investment considerations.
