@@ -1,14 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
-} from 'recharts';
+import { createChart, CrosshairMode, CandlestickSeries, Time } from 'lightweight-charts';
 
 interface StockData {
   symbol: string;
@@ -18,10 +10,23 @@ interface StockData {
   pe_ratio?: number;
   dividend_yield?: number;
   ai_summary?: string[];
+  news?: {
+    title: string;
+    summary: string;
+    url: string;
+    sentiment: string;
+  }[];
+  description?: string;
+  revenue?: number;
+  net_income?: number;
+  eps?: number;
 }
 
 interface HistoryPoint {
-  date: string;
+  time: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
 }
 
@@ -35,6 +40,7 @@ const StockDetail: React.FC = () => {
   const [historyCache, setHistoryCache] = useState<{ [range: string]: HistoryPoint[] }>({});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isLoading, setIsLoading] = useState(true);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -54,7 +60,6 @@ const StockDetail: React.FC = () => {
           const data = await res.json();
           if (!data.error) {
             if (!stockSet) {
-              console.log("🧠 AI Summary Received:", data.ai_summary);
               setStock({
                 symbol: data.symbol,
                 name: data.name,
@@ -62,7 +67,12 @@ const StockDetail: React.FC = () => {
                 market_cap: data.market_cap,
                 pe_ratio: data.pe_ratio,
                 dividend_yield: data.dividend_yield,
-                ai_summary: data.ai_summary
+                ai_summary: data.ai_summary,
+                news: data.news || [],
+                description: data.description,
+                revenue: data.revenue,
+                net_income: data.net_income,
+                eps: data.eps,
               });
               stockSet = true;
             }
@@ -83,59 +93,73 @@ const StockDetail: React.FC = () => {
     }
   }, [symbol]);
 
+  useEffect(() => {
+    if (!chartContainerRef.current || !historyCache[selectedRange]) return;
+
+    const chart = createChart(chartContainerRef.current, {
+      width: chartContainerRef.current.clientWidth,
+      height: 384,
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#000',
+        attributionLogo: false,
+      },
+      grid: {
+        vertLines: { color: '#eee' },
+        horzLines: { color: '#eee' },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderVisible: false,
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    const candleSeries = chart.addSeries(CandlestickSeries, {
+      upColor: '#26a69a',
+      downColor: '#ef5350',
+      borderVisible: false,
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
+    });
+
+    const transformed = historyCache[selectedRange]
+      .map((point) => ({
+        time: point.time as Time,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      }))
+      .filter(d => d.open !== undefined && d.close !== undefined);
+
+    candleSeries.setData(transformed);
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
+    });
+    resizeObserver.observe(chartContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+      chart.remove();
+    };
+  }, [historyCache, selectedRange]);
+
   const handleRangeChange = (range: string) => {
     setSelectedRange(range);
   };
 
-  const formatXAxis = (tick: string) => {
-    const date = new Date(Date.parse(tick));
-    switch (selectedRange) {
-      case '1d': return tick.slice(11, 16);
-      case '5d':
-      case '1mo': return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
-      case '6mo':
-      case '1y': return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;
-      default: return tick;
-    }
-  };
-
-  const filterXAxisTicks = (history: HistoryPoint[]) => {
-    const seenDays = new Set<string>();
-    return history
-      .filter(({ date }) => {
-        const day = date.slice(0, 10); // YYYY-MM-DD
-        if (!seenDays.has(day)) {
-          seenDays.add(day);
-          return true;
-        }
-        return false;
-      })
-      .map(({ date }) => date);
-  };
-
-  const filterHistoryByRange = (history: HistoryPoint[], range: string) => {
-    const now = new Date();
-    const cutoff = new Date();
-
-    if (range === '6mo') {
-      cutoff.setMonth(now.getMonth() - 6);
-    } else if (range === '1y') {
-      cutoff.setFullYear(now.getFullYear() - 1);
-    } else {
-      return history; // no filtering for 1d, 5d, 1mo
-    }
-
-    return history.filter((point) => {
-      const pointDate = new Date(point.date);
-      return pointDate >= cutoff;
-    });
-  };
-
   if (error) return <p className="text-red-500 p-4">{error}</p>;
   if (isLoading || !stock) return <p className="p-4">Loading...</p>;
-
-  const rawHistory = historyCache[selectedRange] || [];
-  const history = filterHistoryByRange(rawHistory, selectedRange);
 
   return (
     <div
@@ -159,47 +183,55 @@ const StockDetail: React.FC = () => {
       </div>
 
       {/* Stock Chart */}
-      <div className="h-64 bg-white mb-6">
-        {history.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={history}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatXAxis}
-                ticks={selectedRange === '1d' ? undefined : filterXAxisTicks(history)}
-              />
-              <YAxis domain={['auto', 'auto']} />
-              <Tooltip
-                labelFormatter={(label) => {
-                  const date = new Date(label);
-                  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-                }}
-              />
-              <Line type="monotone" dataKey="close" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            No chart data available
-          </div>
-        )}
-      </div>
+      <div ref={chartContainerRef} className="h-96 bg-white mb-6" />
 
       {/* Stock Stats */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div><strong>Market Cap:</strong> {stock.market_cap?.toLocaleString() || 'N/A'}</div>
         <div><strong>P/E Ratio:</strong> {stock.pe_ratio ?? 'N/A'}</div>
         <div><strong>Dividend Yield:</strong> {stock.dividend_yield ?? 'N/A'}</div>
+        <div><strong>Revenue (TTM):</strong> {stock.revenue?.toLocaleString() || 'N/A'}</div>
+        <div><strong>Net Income (TTM):</strong> {stock.net_income?.toLocaleString() || 'N/A'}</div>
+        <div><strong>EPS (TTM):</strong> {stock.eps ?? 'N/A'}</div>
       </div>
+
+      {stock.description && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">Company Overview</h2>
+          <p className="text-sm text-gray-700">{stock.description}</p>
+        </div>
+      )}
 
       {/* Key Insights */}
       {stock.ai_summary && stock.ai_summary.length > 0 && (
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+        <div className="mt-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-3">Key Insights</h2>
           <ul className="list-disc list-inside text-gray-700 space-y-1 pl-4">
             {stock.ai_summary.map((point, idx) => (
               <li key={idx} className="text-sm leading-snug">{point}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {stock.news && stock.news.length > 0 && (
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-800 mb-3">Recent News</h2>
+          <ul className="space-y-3">
+            {stock.news.map((item, idx) => (
+              <li key={idx} className="text-sm">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
+                  {item.title}
+                </a>
+                <p className="text-gray-600">{item.summary}</p>
+                <span className={`text-xs rounded-full px-2 py-0.5 inline-block mt-1 ${
+                  item.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
+                  item.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
+                  'bg-gray-100 text-gray-700'
+                }`}>
+                  {item.sentiment}
+                </span>
+              </li>
             ))}
           </ul>
         </div>

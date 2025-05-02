@@ -11,7 +11,7 @@ from cache.redis_client import redis_conn
 
 load_dotenv()
 
-ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
 TICKER_FILE = "cached_tickers.json"
 UPDATE_LOG = "last_update.log"
@@ -20,28 +20,32 @@ def fetch_stock_data(symbol):
     try:
         print(f"\n📈 Updating {symbol}...")
 
-        overview_url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={ALPHAVANTAGE_API_KEY}"
-        price_url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={symbol}&outputsize=compact&apikey={ALPHAVANTAGE_API_KEY}"
+        polygon_key = os.getenv("POLYGON_API_KEY")
+        headers = {"Authorization": f"Bearer {polygon_key}"}
 
-        overview_res = requests.get(overview_url)
-        price_res = requests.get(price_url)
-        overview = overview_res.json()
-        prices = price_res.json()
+        # Company info
+        overview_url = f"https://api.polygon.io/v3/reference/tickers/{symbol}?apiKey={polygon_key}"
+        overview_res = requests.get(overview_url, headers=headers)
+        overview = overview_res.json().get("results", {})
 
-        # Check for API errors
-        for data, label in [(overview, "Overview"), (prices, "Prices")]:
-            if any(key in data for key in ["Note", "Error Message", "Information"]):
-                print(f"⚠️ Skipping {symbol} due to API error in {label}: {data}")
-                return None
+        # Price history
+        now = int(time.time())
+        thirty_days_ago = now - 60 * 60 * 24 * 30
+        price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/{thirty_days_ago * 1000}/{now * 1000}?adjusted=true&sort=asc&apiKey={polygon_key}"
+        price_res = requests.get(price_url, headers=headers)
+        price_json = price_res.json()
 
-        time_series = prices.get("Time Series (Daily)")
-        if not overview or not time_series or "Name" not in overview:
+        if "results" not in price_json or not overview:
             print(f"❌ Incomplete data for {symbol}. Skipping.")
             return None
 
-        sorted_dates = sorted(time_series.keys(), reverse=True)
-        latest_date = sorted_dates[0]
-        latest_data = time_series[latest_date]
+        prices = price_json["results"]
+        if not prices:
+            print(f"❌ No price data for {symbol}. Skipping.")
+            return None
+
+        latest_data = prices[-1]
+        latest_date = time.strftime('%Y-%m-%d', time.gmtime(latest_data["t"] / 1000))
 
         summary = generate_ai_summary(overview)
         fin_summary = interpret_financials(overview)
@@ -55,25 +59,28 @@ def fetch_stock_data(symbol):
             category_tags.append("Blue Chips")
 
         history = [
-            {"date": d, "close": round(float(time_series[d]["4. close"]), 2)}
-            for d in sorted_dates
+            {
+                "date": time.strftime('%Y-%m-%d', time.gmtime(item["t"] / 1000)),
+                "close": round(item["c"], 2)
+            }
+            for item in prices
         ]
 
         response_data = {
             'symbol': symbol.upper(),
             'date': latest_date,
-            'open': round(float(latest_data.get("1. open", 0)), 2),
-            'high': round(float(latest_data.get("2. high", 0)), 2),
-            'low': round(float(latest_data.get("3. low", 0)), 2),
-            'close': round(float(latest_data.get("4. close", 0)), 2),
-            'volume': int(float(latest_data.get("6. volume", 0))),
-            'name': overview.get('Name', 'N/A'),
-            'sector': overview.get('Sector', 'N/A'),
-            'market_cap': int(overview.get('MarketCapitalization', 0)),
-            'pe_ratio': overview.get('PERatio', None),
-            'beta': overview.get('Beta', None),
-            'dividend_yield': overview.get('DividendYield', None),
-            'profit_margin': overview.get('ProfitMargin', None),
+            'open': round(latest_data["o"], 2),
+            'high': round(latest_data["h"], 2),
+            'low': round(latest_data["l"], 2),
+            'close': round(latest_data["c"], 2),
+            'volume': int(latest_data["v"]),
+            'name': overview.get("name", "N/A"),
+            'sector': overview.get("sic_description", "N/A"),
+            'market_cap': int(overview.get("market_cap", 0)),
+            'pe_ratio': overview.get("pe_ratio", None),
+            'beta': overview.get("beta", None),
+            'dividend_yield': overview.get("dividend_yield", None),
+            'profit_margin': overview.get("profit_margin", None),
             'summary': summary,
             'categoryTags': category_tags,
             'history': history,

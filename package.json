@@ -3,6 +3,7 @@
   "dependencies": {
     "axios": "^1.8.4",
     "express": "^4.21.2",
+    "lightweight-charts": "^5.0.6",
     "react-router-dom": "^7.5.0"
   },
   "devDependencies": {
