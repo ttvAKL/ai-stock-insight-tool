@@ -4,11 +4,12 @@ import requests, os
 from dotenv import load_dotenv; load_dotenv()
 from services.summary_generator import generate_ai_summary
 from services.financials import interpret_financials
-from datetime import datetime, timedelta
+from datetime import datetime
 
 redis_conn = redis.Redis(host='localhost', port=6379, db=0)
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
+
 
 def fetch_polygon_news(ticker):
     api_key = os.getenv("POLYGON_API_KEY")
@@ -30,94 +31,84 @@ def fetch_polygon_news(ticker):
         print(f"❌ Failed to fetch news: {e}")
         return []
 
-@stock_bp.route('/<symbol>', defaults={'range_param': '1mo'}, methods=['GET'])
-@stock_bp.route('/<symbol>/<range_param>', methods=['GET'])
-def get_stock_data(symbol, range_param):
+@stock_bp.route('/<symbol>', methods=['GET'])
+def get_stock_data(symbol):
+    def format_large_number(num):
+        try:
+            num = float(num)
+            for unit in ['', 'K', 'M', 'B', 'T']:
+                if abs(num) < 1000.0:
+                    return f"{num:.1f} {unit}".strip()
+                num /= 1000.0
+            return f"{num:.1f} P"
+        except:
+            return num
+
     try:
         print(f"🪪 Requested symbol: {symbol}")
         POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
-        base_url = "https://api.polygon.io"
-        
-        now = datetime.utcnow()
 
-        granularity_map = {
-            "1d": (5, "minute", 1),
-            "5d": (15, "minute", 5),
-            "1mo": (30, "minute", 30),
-            "6mo": (1, "day", 180),
-            "1y": (1, "day", 365),
-            "5y": (1, "week", 1825)
-        }
-        multiplier, timespan, days = granularity_map.get(range_param, (1, "day", 30))
+        ohlc_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol.upper()}/prev?adjusted=true&apiKey={POLYGON_API_KEY}"
+        ohlc_res = requests.get(ohlc_url)
+        ohlc_data = ohlc_res.json().get("results", [{}])[0]
 
-        from_date = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-        to_date = now.strftime("%Y-%m-%d")
-        
-        price_url = f"{base_url}/v2/aggs/ticker/{symbol.upper()}/range/{multiplier}/{timespan}/{from_date}/{to_date}?adjusted=true&sort=asc&limit=50000&apiKey={POLYGON_API_KEY}"
-        price_res = requests.get(price_url)
-        price_data = price_res.json()
+        open_price = ohlc_data.get("o", "N/A")
+        high_price = ohlc_data.get("h", "N/A")
+        low_price = ohlc_data.get("l", "N/A")
+        close_price = ohlc_data.get("c", "N/A")
+        volume = ohlc_data.get("v", "N/A")
 
-        if "results" not in price_data:
-            return jsonify({"error": f"No price data found for {symbol}"}), 404
-
-        results = price_data["results"]
-        history = [
-            {
-                "time": int(entry["t"] / 1000),
-                "open": round(entry["o"], 2),
-                "high": round(entry["h"], 2),
-                "low": round(entry["l"], 2),
-                "close": round(entry["c"], 2)
-            }
-            for entry in results
-        ]
-
-        latest_entry = results[-1]
-        latest_date = datetime.utcfromtimestamp(latest_entry["t"] / 1000).strftime("%Y-%m-%d")
-        
-        fundamentals_url = f"https://api.polygon.io/v3/reference/tickers/{symbol.upper()}?apiKey={POLYGON_API_KEY}"
-        fund_res = requests.get(fundamentals_url)
-        fund_data = fund_res.json().get("results", {})
-        metrics = fund_data.get("metrics", {})
-
-        overview = {
-            "Name": fund_data.get("name", symbol.upper()),
-            "Symbol": symbol.upper(),
-            "Sector": fund_data.get("sic_description", "N/A"),
-            "MarketCapitalization": fund_data.get("market_cap", 0),
-            "PERatio": metrics.get("pe_ratio", "N/A"),
-            "Beta": metrics.get("beta", "N/A"),
-            "DividendYield": metrics.get("dividend_yield", "N/A"),
-            "ProfitMargin": metrics.get("profit_margin", "N/A")
-        }
-
-        # Fetch additional financial metrics
         financials_url = f"https://api.polygon.io/vX/reference/financials?ticker={symbol.upper()}&limit=1&apiKey={POLYGON_API_KEY}"
         financials_res = requests.get(financials_url)
         financials_data = financials_res.json().get("results", [])
 
-        description = fund_data.get("description", "N/A")
-        revenue = None
-        net_income = None
         eps = None
 
+        ref_url = f"https://api.polygon.io/v3/reference/tickers/{symbol.upper()}?apiKey={POLYGON_API_KEY}"
+        ref_res = requests.get(ref_url)
+        ref_data = ref_res.json().get("results", {})
+
+        overview = {
+            "Name": ref_data.get("name", symbol.upper()),
+            "Symbol": symbol.upper(),
+            "Sector": "N/A",
+            "MarketCapitalization": "N/A",
+            "PERatio": "N/A",
+            "EPS": eps or "N/A",
+            "ProfitMargin": "N/A"
+        }
+
+        revenue = None
+        net_income = None
+
         if financials_data:
-            financials = financials_data[0].get("financials", {})
-            income = financials.get("income_statement", {})
+            report = financials_data[0]
+            fundamentals = report.get("financials", {})
+            income = fundamentals.get("income_statement", {})
+            balance = fundamentals.get("balance_sheet", {})
+            metrics = report.get("market_data", {})
 
-            try:
-                eps = income.get("diluted_earnings_per_share", {}).get("value") or income.get("basic_earnings_per_share", {}).get("value")
-                dividend = income.get("common_stock_dividends", {}).get("value")
+            revenue = income.get("revenues", {}).get("value")
+            net_income = income.get("net_income_loss", {}).get("value")
+            eps = income.get("diluted_earnings_per_share", {}).get("value") or income.get("basic_earnings_per_share", {}).get("value")
 
-                latest_price = latest_entry["c"]
-                overview["PERatio"] = round(latest_price / eps, 2) if eps else "N/A"
-                overview["DividendYield"] = round(dividend / latest_price, 4) if dividend else "N/A"
+            market_cap = ref_data.get("market_cap")
 
-                revenue = income.get("revenues", {}).get("value")
-                net_income = income.get("net_income_loss", {}).get("value")
-            except Exception as e:
-                print(f"⚠️ Failed to calculate PE ratio or dividend yield: {e}")
-        
+            if not market_cap and close_price and income.get("diluted_average_shares", {}).get("value"):
+                shares = income.get("diluted_average_shares", {}).get("value")
+                market_cap = close_price * shares
+
+            pe_ratio = round(market_cap / net_income, 1) if market_cap and net_income else "N/A"
+
+            overview.update({
+                "MarketCapitalization": format_large_number(market_cap),
+                "PERatio": pe_ratio,
+                "ProfitMargin": f"{round(net_income / revenue * 100, 1)}%" if revenue and net_income else "N/A",
+                "EPS": eps or "N/A"
+            })
+
+        overview["PERatio"] = overview["PERatio"] if isinstance(overview["PERatio"], str) else round(overview["PERatio"], 1)
+
         summary = generate_ai_summary(overview)
         fin_summary = interpret_financials(overview)
 
@@ -133,27 +124,25 @@ def get_stock_data(symbol, range_param):
 
         response_data = {
             "symbol": symbol.upper(),
-            "date": latest_date,
-            "open": round(latest_entry["o"], 2),
-            "high": round(latest_entry["h"], 2),
-            "low": round(latest_entry["l"], 2),
-            "close": round(latest_entry["c"], 2),
-            "volume": latest_entry["v"],
             "name": overview["Name"],
             "sector": overview["Sector"],
             "market_cap": overview["MarketCapitalization"],
             "pe_ratio": overview["PERatio"],
-            "beta": overview["Beta"],
-            "dividend_yield": overview["DividendYield"],
+            "eps": overview["EPS"],
             "profit_margin": overview["ProfitMargin"],
             "ai_summary": summary,
             "categoryTags": category_tags,
-            "history": history,
-            "description": description,
-            "revenue": revenue,
-            "net_income": net_income,
-            "eps": eps,
-            "news": news
+            "description": ref_data.get("description", "N/A"),
+            "revenue": format_large_number(revenue),
+            "net_income": format_large_number(net_income),
+            "news": news,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+            "volume": format_large_number(volume),
+            "change": round(close_price - open_price, 2) if isinstance(open_price, (int, float)) and isinstance(close_price, (int, float)) else "N/A",
+            "percent_change": f"{round(((close_price - open_price) / open_price) * 100, 2)}%" if isinstance(open_price, (int, float)) and open_price != 0 else "N/A",
         }
 
         return jsonify(response_data)

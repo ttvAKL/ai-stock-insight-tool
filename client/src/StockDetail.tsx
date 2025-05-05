@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { createChart, CrosshairMode, CandlestickSeries, Time } from 'lightweight-charts';
+import { connectSocket, subscribeToTicker, addTickerListener } from './utils//stockSocket';
 
 interface StockData {
   symbol: string;
@@ -30,17 +31,51 @@ interface HistoryPoint {
   close: number;
 }
 
-const ranges = ['1d', '5d', '1mo', '6mo', '1y'];
+
+const granularities = ['1min', '5min', '30min', '1h', '1d'];
+
+// Utility to align a date to the correct bucket for aggregation
+const getBucketTime = (date: Date, granularity: string): string => {
+  const d = new Date(date);
+  const time = d.getTime();
+
+  const intervals: { [key: string]: number } = {
+    '5min': 5 * 60 * 1000,
+    '30min': 30 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '1d': 24 * 60 * 60 * 1000,
+  };
+
+  if (granularity === '1min') return d.toISOString();
+
+  const bucket = Math.floor(time / intervals[granularity]) * intervals[granularity];
+  return new Date(bucket).toISOString();
+};
 
 const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockData | null>(null);
   const [error, setError] = useState('');
-  const [selectedRange, setSelectedRange] = useState('1mo');
-  const [historyCache, setHistoryCache] = useState<{ [range: string]: HistoryPoint[] }>({});
+  const [selectedGranularity, setSelectedGranularity] = useState('1min');
+  const [historyCache, setHistoryCache] = useState<{ [granularity: string]: HistoryPoint[] }>({});
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isLoading, setIsLoading] = useState(true);
+  const [marketStatus, setMarketStatus] = useState<'open' | 'closed' | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  const fetchMarketStatus = async () => {
+    try {
+      const res = await fetch(`https://api.polygon.io/v1/marketstatus/now?apiKey=${import.meta.env.VITE_POLYGON_API_KEY}`);
+      const data = await res.json();
+      setMarketStatus(data.market === 'open' ? 'open' : 'closed');
+    } catch {
+      setMarketStatus(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchMarketStatus();
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -49,14 +84,14 @@ const StockDetail: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchAllRanges = async () => {
+    const fetchAllGranularities = async () => {
       try {
         const baseUrl = `/api/stock/${symbol}`;
-        const fetchedHistories: { [range: string]: HistoryPoint[] } = {};
+        const fetchedHistories: { [granularity: string]: HistoryPoint[] } = {};
         let stockSet = false;
 
-        for (const range of ranges) {
-          const res = await fetch(`${baseUrl}/${range}`);
+        for (const granularity of granularities) {
+          const res = await fetch(`${baseUrl}?granularity=${granularity}`);
           const data = await res.json();
           if (!data.error) {
             if (!stockSet) {
@@ -66,7 +101,6 @@ const StockDetail: React.FC = () => {
                 sector: data.sector,
                 market_cap: data.market_cap,
                 pe_ratio: data.pe_ratio,
-                dividend_yield: data.dividend_yield,
                 ai_summary: data.ai_summary,
                 news: data.news || [],
                 description: data.description,
@@ -76,7 +110,7 @@ const StockDetail: React.FC = () => {
               });
               stockSet = true;
             }
-            fetchedHistories[range] = data.history || [];
+            fetchedHistories[granularity] = data.history || [];
           }
         }
 
@@ -89,12 +123,48 @@ const StockDetail: React.FC = () => {
     };
 
     if (symbol) {
-      fetchAllRanges();
+      fetchAllGranularities();
+
+      if (marketStatus === 'open') {
+        connectSocket(symbol);
+        if (['1min', '5min', '30min', '1h', '1d'].includes(selectedGranularity)) {
+          subscribeToTicker(symbol!);
+          addTickerListener(symbol!, (update) => {
+            // update is expected to be an AM. message with o/h/l/c/s
+            const candleTime = new Date(update.s);
+            const bucketTime = getBucketTime(candleTime, selectedGranularity);
+
+            const newPoint: HistoryPoint = {
+              time: bucketTime,
+              open: update.o,
+              high: update.h,
+              low: update.l,
+              close: update.c,
+            };
+
+            setHistoryCache(prev => {
+              const current = [...(prev[selectedGranularity] || [])];
+              const last = current[current.length - 1];
+
+              if (last && last.time === bucketTime) {
+                // Update existing aggregated candle
+                last.high = Math.max(last.high, update.h);
+                last.low = Math.min(last.low, update.l);
+                last.close = update.c;
+                return { ...prev, [selectedGranularity]: [...current.slice(0, -1), last] };
+              } else {
+                // Start a new candle
+                return { ...prev, [selectedGranularity]: [...current.slice(-99), newPoint] };
+              }
+            });
+          });
+        }
+      }
     }
-  }, [symbol]);
+  }, [symbol, selectedGranularity, marketStatus]);
 
   useEffect(() => {
-    if (!chartContainerRef.current || !historyCache[selectedRange]) return;
+    if (!chartContainerRef.current || !historyCache[selectedGranularity]) return;
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
@@ -129,14 +199,17 @@ const StockDetail: React.FC = () => {
       wickDownColor: '#ef5350',
     });
 
-    const transformed = historyCache[selectedRange]
-      .map((point) => ({
-        time: point.time as Time,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-      }))
+    const transformed = historyCache[selectedGranularity]
+      .map((point) => {
+        const timestamp = Date.parse(point.time);
+        return {
+          time: Math.floor(timestamp / 1000) as Time,
+          open: point.open,
+          high: point.high,
+          low: point.low,
+          close: point.close,
+        };
+      })
       .filter(d => d.open !== undefined && d.close !== undefined);
 
     candleSeries.setData(transformed);
@@ -152,11 +225,7 @@ const StockDetail: React.FC = () => {
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [historyCache, selectedRange]);
-
-  const handleRangeChange = (range: string) => {
-    setSelectedRange(range);
-  };
+  }, [historyCache, selectedGranularity]);
 
   if (error) return <p className="text-red-500 p-4">{error}</p>;
   if (isLoading || !stock) return <p className="p-4">Loading...</p>;
@@ -169,15 +238,21 @@ const StockDetail: React.FC = () => {
       <h1 className="text-3xl font-bold mb-2">{stock.name || stock.symbol}</h1>
       <p className="text-sm text-gray-500 mb-4">Sector: {stock.sector || 'N/A'}</p>
 
-      {/* Range Buttons */}
+      {marketStatus === 'closed' && (
+        <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-4 text-sm">
+          ⚠️ The stock market is currently closed. Showing latest available data.
+        </div>
+      )}
+
+      {/* Granularity Buttons */}
       <div className="flex space-x-2 mb-4">
-        {ranges.map((range) => (
+        {granularities.map((g) => (
           <button
-            key={range}
-            onClick={() => handleRangeChange(range)}
-            className={`px-3 py-1 rounded ${selectedRange === range ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}
+            key={g}
+            onClick={() => setSelectedGranularity(g)}
+            className={`px-3 py-1 rounded ${selectedGranularity === g ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}
           >
-            {range.toUpperCase()}
+            {g}
           </button>
         ))}
       </div>
@@ -189,10 +264,9 @@ const StockDetail: React.FC = () => {
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div><strong>Market Cap:</strong> {stock.market_cap?.toLocaleString() || 'N/A'}</div>
         <div><strong>P/E Ratio:</strong> {stock.pe_ratio ?? 'N/A'}</div>
-        <div><strong>Dividend Yield:</strong> {stock.dividend_yield ?? 'N/A'}</div>
         <div><strong>Revenue (TTM):</strong> {stock.revenue?.toLocaleString() || 'N/A'}</div>
         <div><strong>Net Income (TTM):</strong> {stock.net_income?.toLocaleString() || 'N/A'}</div>
-        <div><strong>EPS (TTM):</strong> {stock.eps ?? 'N/A'}</div>
+        <div><strong>Earnings Per Share (TTM):</strong> {stock.eps ?? 'N/A'}</div>
       </div>
 
       {stock.description && (
