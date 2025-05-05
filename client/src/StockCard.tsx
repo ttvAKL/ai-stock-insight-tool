@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getSummaryText } from './utils/summaryText';
 
 interface StockCardProps {
   data: {
@@ -11,9 +10,10 @@ interface StockCardProps {
     low: string;
     close: string;
     volume: string;
-    summary?: string[];
     source?: 'user' | 'recommended';
     categoryTags?: string[];
+    ai_summary?: string[];
+    name?: string;
   };
   isInWatchlist?: boolean;
   onToggleWatchlist?: () => void;
@@ -23,7 +23,7 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[400px] bg-white rounded-lg shadow-lg group/card">
+    <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[330px] bg-white rounded-lg shadow-lg group/card">
       {onToggleWatchlist && (
         <button
           onClick={(e) => {
@@ -69,7 +69,7 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
       )}
       <Link to={`/stock/${data.symbol}`} className="block h-full">
         <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
-          {data.symbol} - {data.date}
+          {data.symbol}
           {data.source === 'recommended' && (
             <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
               Recommended
@@ -83,7 +83,7 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
           <div className="flex flex-col"><span className="font-semibold">Close:</span><span>{data.close}</span></div>
           <div className="flex flex-col"><span className="font-semibold">Volume:</span><span>{data.volume}</span></div>
         </div>
-        {data.summary && data.summary.length > 0 && (
+        {data.ai_summary && (
           <div className="mt-4">
             <button
               onClick={(e) => {
@@ -106,11 +106,9 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
               </span>
             </button>
             {expanded && (
-              <ul className="list-disc pl-5 text-gray-700 space-y-2">
-                {data.summary.map((key, index) => (
-                  <li key={index} className="relative group/summary w-fit">
-                    {getSummaryText(key)}
-                  </li>
+              <ul className="list-disc pl-5 text-gray-700 space-y-1">
+                {data.ai_summary.map((point, idx) => (
+                  <li key={idx} className="text-sm leading-snug">{point}</li>
                 ))}
               </ul>
             )}

@@ -3,3 +3,5 @@ flask-cors
 yfinance
 python-dotenv
 apscheduler
+websockets
+polygon-api-client

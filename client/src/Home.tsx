@@ -106,7 +106,7 @@ const Home: React.FC = () => {
     };
 
     fetchCategoryStocks();
-  }, [activeCategory]);
+  }, [activeCategory, watchlistSymbols]);
 
   // Toggle a stock in the persistent watchlist, remove from display if on Watchlist tab and unstarred
   const toggleWatchlist = (symbol: string) => {
