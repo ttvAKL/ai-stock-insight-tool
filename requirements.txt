@@ -5,3 +5,7 @@ python-dotenv
 apscheduler
 websockets
 polygon-api-client
+redis
+rq
+PyJWT
+flask-socketio

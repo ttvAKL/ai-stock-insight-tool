@@ -2,14 +2,14 @@ import os
 import json
 import time
 import pickle
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
 from services.summary_generator import generate_ai_summary
 from services.financials import interpret_financials
 from cache.redis_client import redis_conn
 from services.websocket_listener import websocket_fetch_company_overview
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 

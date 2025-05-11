@@ -1,10 +1,13 @@
 import redis
 from flask import Blueprint, jsonify, request
 import requests, os
-from dotenv import load_dotenv; load_dotenv()
+from dotenv import load_dotenv, find_dotenv
 from services.summary_generator import generate_ai_summary
 from services.financials import interpret_financials
-from datetime import datetime
+from services.ticker_utils import get_ticker_suggestions
+from datetime import datetime, timedelta
+
+load_dotenv(find_dotenv())
 
 redis_conn = redis.Redis(host='localhost', port=6379, db=0)
 
@@ -71,7 +74,7 @@ def get_stock_data(symbol):
         overview = {
             "Name": ref_data.get("name", symbol.upper()),
             "Symbol": symbol.upper(),
-            "Sector": "N/A",
+            "Sector": ref_data.get("sic_description", "N/A"),
             "MarketCapitalization": "N/A",
             "PERatio": "N/A",
             "EPS": eps or "N/A",
@@ -91,7 +94,6 @@ def get_stock_data(symbol):
             revenue = income.get("revenues", {}).get("value")
             net_income = income.get("net_income_loss", {}).get("value")
             eps = income.get("diluted_earnings_per_share", {}).get("value") or income.get("basic_earnings_per_share", {}).get("value")
-
             market_cap = ref_data.get("market_cap")
 
             if not market_cap and close_price and income.get("diluted_average_shares", {}).get("value"):
@@ -106,6 +108,8 @@ def get_stock_data(symbol):
                 "ProfitMargin": f"{round(net_income / revenue * 100, 1)}%" if revenue and net_income else "N/A",
                 "EPS": eps or "N/A"
             })
+        else:
+            print(f"[DEBUG] No financials data found for {symbol}")
 
         overview["PERatio"] = overview["PERatio"] if isinstance(overview["PERatio"], str) else round(overview["PERatio"], 1)
 
@@ -150,3 +154,37 @@ def get_stock_data(symbol):
     except Exception as e:
         print(f"Error in get_stock_data: {e}")
         return jsonify({"error": f"Error fetching data for {symbol}"}), 500
+
+@stock_bp.route('/suggest')
+def suggest_tickers():
+    query = request.args.get("q", "")
+    if not query:
+        return jsonify([])
+
+    try:
+        results = get_ticker_suggestions(query)
+        return jsonify(results)
+    except Exception as e:
+        print(f"[ERROR] Suggestion error: {e}")
+        return jsonify([]), 500
+
+@stock_bp.route('/<symbol>/history')
+def get_historical_data(symbol):
+    try:
+        POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+        granularity = request.args.get("granularity", "1min")
+
+        from services.historical import fetch_polygon_history
+
+        from_time = request.args.get("from")
+        to_time = request.args.get("to")
+
+        from_dt = datetime.fromisoformat(from_time) if from_time else None
+        to_dt = datetime.fromisoformat(to_time) if to_time else None
+
+        results = fetch_polygon_history(symbol, granularity, from_dt, to_dt)
+
+        return jsonify(results)
+    except Exception as e:
+        print(f"Error in get_historical_data: {e}")
+        return jsonify({"error": f"Error fetching historical data for {symbol}"}), 500

@@ -2,8 +2,11 @@ import os
 from polygon import WebSocketClient
 from polygon.websocket.models import WebSocketMessage, Feed, Market
 from typing import List
+import os
+from dotenv import load_dotenv, find_dotenv
 
-# Create the WebSocket client
+load_dotenv(find_dotenv())
+
 ws_client = WebSocketClient(
     api_key=os.getenv("POLYGON_API_KEY"),
     feed=Feed.Delayed,
@@ -12,8 +15,7 @@ ws_client = WebSocketClient(
 
 # Message handler
 def handle_msg(msgs: List[WebSocketMessage]):
-    for m in msgs:
-        print(m)
+    pass  # Disabled logging to avoid terminal flooding
 
 # Subscribe to all 1-minute aggregate stock data
 ws_client.subscribe("AM.*")
