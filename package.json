@@ -5,7 +5,7 @@
     "express": "^4.21.2",
     "framer-motion": "^12.10.5",
     "lightweight-charts": "^5.0.6",
-    "react-router-dom": "^7.5.0",
+    "react-router-dom": "^7.6.0",
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
