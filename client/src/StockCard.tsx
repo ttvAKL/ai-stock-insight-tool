@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { socket } from './socket';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 interface StockCardProps {
   data: {
@@ -19,8 +21,148 @@ interface StockCardProps {
   onToggleWatchlist?: () => void;
 }
 
+type OhlcMessage = {
+  symbol: string;
+  granularity: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+const AnimatedValue: React.FC<{ value: number; prevValue: number }> = ({ value, prevValue }) => {
+  const colorClass =
+    value > prevValue ? 'text-green-600' :
+    value < prevValue ? 'text-red-600' :
+    'text-gray-500';
+  const ref = useRef<HTMLSpanElement>(null);
+
+
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.classList.remove('fade-in-up');
+      void ref.current.offsetWidth; // trigger reflow
+      ref.current.classList.add('fade-in-up');
+    }
+  }, [value]);
+
+  return (
+    <span
+      ref={ref}
+      className={`transition-all duration-300 ease-in-out font-semibold ${colorClass}`}
+    >
+      {value}
+    </span>
+  );
+};
+
 const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatchlist }) => {
   const [expanded, setExpanded] = useState(false);
+
+  const [ohlc, setOhlc] = useState({
+    open: parseFloat(data.open),
+    high: parseFloat(data.high),
+    low: parseFloat(data.low),
+    close: parseFloat(data.close)
+  });
+  const [prevOhlc, setPrevOhlc] = useState(ohlc);
+  const [socketReceived, setSocketReceived] = useState(false);
+  const fallbackTriggered = useRef(false);
+
+  // Fallback fetch for two most recent 1min OHLCs
+  const fetchRecentOhlc = async () => {
+    try {
+      const now = new Date();
+      const day = now.getUTCDay();
+      const hours = now.getUTCHours();
+
+      const lastMarketClose = new Date();
+
+      if (day === 6) {
+        // Saturday
+        lastMarketClose.setUTCDate(now.getUTCDate() - 1);
+        lastMarketClose.setUTCHours(20, 0, 0, 0);
+      } else if (day === 0) {
+        // Sunday
+        lastMarketClose.setUTCDate(now.getUTCDate() - 2);
+        lastMarketClose.setUTCHours(20, 0, 0, 0);
+      } else if (day === 1 && hours < 13) {
+        // Monday before market opens
+        lastMarketClose.setUTCDate(now.getUTCDate() - 3);
+        lastMarketClose.setUTCHours(20, 0, 0, 0);
+      } else if (hours < 13) {
+        // Weekday before market opens
+        lastMarketClose.setUTCDate(now.getUTCDate() - 1);
+        lastMarketClose.setUTCHours(20, 0, 0, 0);
+      } else {
+        // Market is open today — fallback shouldn't run
+        return;
+      }
+
+      const end = lastMarketClose.toISOString();
+      const start = new Date(lastMarketClose.getTime() - 2 * 60000).toISOString(); // 2 minutes before
+
+      const res = await axios.get(`/api/stock/${data.symbol}/history`, {
+        params: { granularity: '1min', from: start, to: end, full: true }
+      });
+
+      const candles = res.data || [];
+
+      if (candles.length >= 2) {
+        const latest = candles[candles.length - 1];
+        const previous = candles[candles.length - 2];
+
+        setPrevOhlc({
+          open: previous.open,
+          high: previous.high,
+          low: previous.low,
+          close: previous.close
+        });
+        setOhlc({
+          open: latest.open,
+          high: latest.high,
+          low: latest.low,
+          close: latest.close
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch fallback OHLC:", error);
+    }
+  };
+
+  useEffect(() => {
+    const handleUpdate = (msg: OhlcMessage) => {
+      console.log("[Socket Update]", msg);
+      if (msg.symbol !== data.symbol || msg.granularity !== '1min') return;
+      if (!msg.open || !msg.high || !msg.low || !msg.close) return;
+
+      setSocketReceived(true);
+      const newOhlc = {
+        open: msg.open,
+        high: msg.high,
+        low: msg.low,
+        close: msg.close
+      };
+      setPrevOhlc({ ...ohlc });
+      setOhlc(newOhlc);
+    };
+
+    socket.on('update', handleUpdate);
+
+
+    const fallbackTimeout = setTimeout(() => {
+      if (!socketReceived && !fallbackTriggered.current) {
+        fallbackTriggered.current = true;
+        fetchRecentOhlc();
+      }
+    }, 3000); // extend to 5s for reliability
+
+    return () => {
+      socket.off('update', handleUpdate);
+      clearTimeout(fallbackTimeout);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.symbol, ohlc]);
 
   return (
     <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[330px] bg-white rounded-lg shadow-lg group/card">
@@ -77,11 +219,26 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
           )}
         </h2>
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="flex flex-col"><span className="font-semibold">Open:</span><span>{data.open}</span></div>
-          <div className="flex flex-col"><span className="font-semibold">High:</span><span>{data.high}</span></div>
-          <div className="flex flex-col"><span className="font-semibold">Low:</span><span>{data.low}</span></div>
-          <div className="flex flex-col"><span className="font-semibold">Close:</span><span>{data.close}</span></div>
-          <div className="flex flex-col"><span className="font-semibold">Volume:</span><span>{data.volume}</span></div>
+          <div className="flex flex-col">
+            <span className="font-semibold">Open:</span>
+            <AnimatedValue value={ohlc.open} prevValue={prevOhlc.open} />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold">High:</span>
+            <AnimatedValue value={ohlc.high} prevValue={prevOhlc.high} />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold">Low:</span>
+            <AnimatedValue value={ohlc.low} prevValue={prevOhlc.low} />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold">Close:</span>
+            <AnimatedValue value={ohlc.close} prevValue={prevOhlc.close} />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-semibold">Volume:</span>
+            <span>{data.volume}</span>
+          </div>
         </div>
         {data.ai_summary && (
           <div className="mt-4">

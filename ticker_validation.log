@@ -1,0 +1,24 @@
+2025-05-11 02:19:38,340 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:3000
+2025-05-11 02:19:38,341 - INFO - [33mPress CTRL+C to quit[0m
+2025-05-11 02:19:39,148 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ HTTP/1.1" 200 -
+2025-05-11 02:19:39,250 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=30min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,252 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1h&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,256 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1d&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,263 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=5min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,528 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ HTTP/1.1" 200 -
+2025-05-11 02:19:39,633 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=30min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,638 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1d&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,645 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1h&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,647 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=5min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,780 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ HTTP/1.1" 200 -
+2025-05-11 02:19:39,895 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1h&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,897 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=30min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,911 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=1d&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:39,923 - INFO - 127.0.0.1 - - [11/May/2025 02:19:39] "GET /api/stock/VZ/history?granularity=5min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:40,274 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:40,416 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:40,473 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&from=2025-05-02T12:08:00.000Z&to=2025-05-07T12:07:59.000Z HTTP/1.1" 200 -
+2025-05-11 02:19:40,555 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&full=true HTTP/1.1" 200 -
+2025-05-11 02:19:40,642 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&from=2025-05-02T12:08:00.000Z&to=2025-05-07T12:07:59.000Z HTTP/1.1" 200 -
+2025-05-11 02:19:40,772 - INFO - 127.0.0.1 - - [11/May/2025 02:19:40] "GET /api/stock/VZ/history?granularity=1min&from=2025-05-02T12:08:00.000Z&to=2025-05-07T12:07:59.000Z HTTP/1.1" 200 -

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import './index.css'; // or a global CSS file if using one
 import StockCard from './StockCard';
 import SearchBar from './SearchBar';
 import STARTER_PACKS from './StarterPacks';
@@ -48,6 +50,9 @@ const Home: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [showWatchlistNotice, setShowWatchlistNotice] = useState(false);
+  const [showDuplicateNotice, setShowDuplicateNotice] = useState(false);
+  const [removingSymbols, setRemovingSymbols] = useState<string[]>([]);
+  const [justAddedSymbols, setJustAddedSymbols] = useState<string[]>([]);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -106,45 +111,69 @@ const Home: React.FC = () => {
     };
 
     fetchCategoryStocks();
-  }, [activeCategory, watchlistSymbols]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory]);
 
   // Toggle a stock in the persistent watchlist, remove from display if on Watchlist tab and unstarred
   const toggleWatchlist = (symbol: string) => {
-    let updated: string[];
     if (watchlistSymbols.includes(symbol)) {
-      updated = watchlistSymbols.filter((s) => s !== symbol);
-      if (activeCategory === 'Watchlist') {
+      setRemovingSymbols((prev) => [...prev, symbol]);
+      setTimeout(() => {
+        setWatchlistSymbols((prev) => {
+          const updated = prev.filter((s) => s !== symbol);
+          localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
+          return updated;
+        });
         setCategoryStocks((prev) => prev.filter((s) => s.symbol !== symbol));
-      }
+        setRemovingSymbols((prev) => prev.filter((s) => s !== symbol));
+      }, 300);
     } else {
-      updated = [...watchlistSymbols, symbol];
+      const updated = [...watchlistSymbols, symbol];
+      setWatchlistSymbols(updated);
+      localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
+      setJustAddedSymbols((prev) => [...prev, symbol]);
+      setTimeout(() => {
+        setJustAddedSymbols((prev) => prev.filter((s) => s !== symbol));
+      }, 300);
+      setShowWatchlistNotice(true);
+      setTimeout(() => setShowWatchlistNotice(false), 3000);
     }
-    setWatchlistSymbols(updated);
-    localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
   };
 
   // Handle searching for a stock and update lists accordingly
   const handleSearch = async (symbol: string) => {
+    if (watchlistSymbols.includes(symbol)) {
+      setShowDuplicateNotice(true);
+      setTimeout(() => setShowDuplicateNotice(false), 3000);
+      return;
+    }
     try {
       const res = await fetch(`/api/stock/${symbol}`);
       const data = await res.json();
       if (!data.error) {
-
+        // Trigger AI summary generation
         const shouldAddToWatchlist = !watchlistSymbols.includes(symbol);
         if (shouldAddToWatchlist) {
           const newWatchlist = [...watchlistSymbols, symbol];
           setWatchlistSymbols(newWatchlist);
           localStorage.setItem('watchlistSymbols', JSON.stringify(newWatchlist));
+          setJustAddedSymbols((prev) => [...prev, symbol]);
+          setTimeout(() => {
+            setJustAddedSymbols((prev) => prev.filter((s) => s !== symbol));
+          }, 300);
+          setShowWatchlistNotice(true);
+          setTimeout(() => setShowWatchlistNotice(false), 3000);
+        }
+
+        try {
+          await fetch(`/api/stock/${symbol}/generate-summary`, { method: 'POST' });
+        } catch (summaryError) {
+          console.error(`Failed to generate summary for ${symbol}`, summaryError);
         }
 
         if (activeCategory === 'Watchlist' && !categoryStocks.find((s) => s.symbol === symbol)) {
-          const updated = [data, ...categoryStocks];
+          const updated = [...categoryStocks, data];
           setCategoryStocks(updated);
-        }
-
-        if (activeCategory !== 'Watchlist') {
-          setShowWatchlistNotice(true);
-          setTimeout(() => setShowWatchlistNotice(false), 3000);
         }
       }
     } catch (err) {
@@ -162,11 +191,20 @@ const Home: React.FC = () => {
       <div className="w-full max-w-7xl text-center">
         <h1 className="text-4xl font-bold mb-8">AI Stock Insight Tool</h1>
         <SearchBar onSearch={handleSearch} />
-        {showWatchlistNotice && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-100 text-green-800 px-4 py-2 rounded shadow-md text-sm z-50 transition-opacity duration-300">
-            Stock added to your Watchlist
-          </div>
-        )}
+        <div
+          className={`fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-100 text-green-800 px-4 py-2 rounded shadow-md text-sm z-50 transition-opacity duration-500 ${
+            showWatchlistNotice ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          Stock added to your Watchlist
+        </div>
+        <div
+          className={`fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-800 px-4 py-2 rounded shadow-md text-sm z-50 transition-opacity duration-500 ${
+            showDuplicateNotice ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          Stock already added to your Watchlist
+        </div>
       </div>
 
       <div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -197,14 +235,31 @@ const Home: React.FC = () => {
           </div>
         ) : (
           <div className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 items-start">
-            {stocksToDisplay.map((stock) => (
-              <StockCard
-                key={stock.symbol}
-                data={stock as Required<StockData>}
-                isInWatchlist={watchlistSymbols.includes(stock.symbol)}
-                onToggleWatchlist={() => toggleWatchlist(stock.symbol)}
-              />
-            ))}
+            <AnimatePresence>
+              {stocksToDisplay.map((stock) => (
+                <motion.div
+                  key={stock.symbol}
+                  layout
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className={`transform ${
+                    removingSymbols.includes(stock.symbol)
+                      ? 'opacity-0 scale-95'
+                      : justAddedSymbols.includes(stock.symbol)
+                      ? 'opacity-0 scale-95'
+                      : 'opacity-100 scale-100'
+                  }`}
+                >
+                  <StockCard
+                    data={stock as Required<StockData>}
+                    isInWatchlist={watchlistSymbols.includes(stock.symbol)}
+                    onToggleWatchlist={() => toggleWatchlist(stock.symbol)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>

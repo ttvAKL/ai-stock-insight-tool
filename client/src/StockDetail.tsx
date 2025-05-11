@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { createChart, CrosshairMode, CandlestickSeries, Time } from 'lightweight-charts';
-import { connectSocket, subscribeToTicker, addTickerListener } from './utils//stockSocket';
+import { createChart, CrosshairMode, CandlestickSeries, Time, CandlestickData, IChartApi } from 'lightweight-charts';
+import { socket } from './socket';
 
 interface StockData {
   symbol: string;
@@ -34,24 +34,6 @@ interface HistoryPoint {
 
 const granularities = ['1min', '5min', '30min', '1h', '1d'];
 
-// Utility to align a date to the correct bucket for aggregation
-const getBucketTime = (date: Date, granularity: string): string => {
-  const d = new Date(date);
-  const time = d.getTime();
-
-  const intervals: { [key: string]: number } = {
-    '5min': 5 * 60 * 1000,
-    '30min': 30 * 60 * 1000,
-    '1h': 60 * 60 * 1000,
-    '1d': 24 * 60 * 60 * 1000,
-  };
-
-  if (granularity === '1min') return d.toISOString();
-
-  const bucket = Math.floor(time / intervals[granularity]) * intervals[granularity];
-  return new Date(bucket).toISOString();
-};
-
 const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
   const [stock, setStock] = useState<StockData | null>(null);
@@ -62,6 +44,8 @@ const StockDetail: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [marketStatus, setMarketStatus] = useState<'open' | 'closed' | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const seriesData = useRef<CandlestickData<Time>[]>([]);
+  const chartRef = useRef<IChartApi | null>(null);
 
   const fetchMarketStatus = async () => {
     try {
@@ -86,33 +70,37 @@ const StockDetail: React.FC = () => {
   useEffect(() => {
     const fetchAllGranularities = async () => {
       try {
-        const baseUrl = `/api/stock/${symbol}`;
-        const fetchedHistories: { [granularity: string]: HistoryPoint[] } = {};
-        let stockSet = false;
+        const metaRes = await fetch(`/api/stock/${symbol}`);
+        const meta = await metaRes.json();
 
-        for (const granularity of granularities) {
-          const res = await fetch(`${baseUrl}?granularity=${granularity}`);
-          const data = await res.json();
-          if (!data.error) {
-            if (!stockSet) {
-              setStock({
-                symbol: data.symbol,
-                name: data.name,
-                sector: data.sector,
-                market_cap: data.market_cap,
-                pe_ratio: data.pe_ratio,
-                ai_summary: data.ai_summary,
-                news: data.news || [],
-                description: data.description,
-                revenue: data.revenue,
-                net_income: data.net_income,
-                eps: data.eps,
-              });
-              stockSet = true;
-            }
-            fetchedHistories[granularity] = data.history || [];
-          }
+        if (!meta.error) {
+          setStock({
+            symbol: meta.symbol,
+            name: meta.name,
+            sector: meta.sector,
+            market_cap: meta.market_cap,
+            pe_ratio: meta.pe_ratio,
+            ai_summary: meta.ai_summary,
+            news: meta.news || [],
+            description: meta.description,
+            revenue: meta.revenue,
+            net_income: meta.net_income,
+            eps: meta.eps,
+          });
         }
+
+        const historyRequests = granularities.map(async (g) => {
+          const r = await fetch(`/api/stock/${symbol}/history?granularity=${g}&full=true`);
+          const d = await r.json();
+          return [g, d];
+        });
+
+        const historyResults = await Promise.all(historyRequests);
+        const fetchedHistories: { [granularity: string]: HistoryPoint[] } = {};
+
+        historyResults.forEach(([g, d]) => {
+          fetchedHistories[g] = Array.isArray(d) ? d : [];
+        });
 
         setHistoryCache(fetchedHistories);
       } catch {
@@ -124,47 +112,11 @@ const StockDetail: React.FC = () => {
 
     if (symbol) {
       fetchAllGranularities();
-
-      if (marketStatus === 'open') {
-        connectSocket(symbol);
-        if (['1min', '5min', '30min', '1h', '1d'].includes(selectedGranularity)) {
-          subscribeToTicker(symbol!);
-          addTickerListener(symbol!, (update) => {
-            // update is expected to be an AM. message with o/h/l/c/s
-            const candleTime = new Date(update.s);
-            const bucketTime = getBucketTime(candleTime, selectedGranularity);
-
-            const newPoint: HistoryPoint = {
-              time: bucketTime,
-              open: update.o,
-              high: update.h,
-              low: update.l,
-              close: update.c,
-            };
-
-            setHistoryCache(prev => {
-              const current = [...(prev[selectedGranularity] || [])];
-              const last = current[current.length - 1];
-
-              if (last && last.time === bucketTime) {
-                // Update existing aggregated candle
-                last.high = Math.max(last.high, update.h);
-                last.low = Math.min(last.low, update.l);
-                last.close = update.c;
-                return { ...prev, [selectedGranularity]: [...current.slice(0, -1), last] };
-              } else {
-                // Start a new candle
-                return { ...prev, [selectedGranularity]: [...current.slice(-99), newPoint] };
-              }
-            });
-          });
-        }
-      }
     }
   }, [symbol, selectedGranularity, marketStatus]);
 
   useEffect(() => {
-    if (!chartContainerRef.current || !historyCache[selectedGranularity]) return;
+    if (!chartContainerRef.current || !historyCache[selectedGranularity] || historyCache[selectedGranularity].length === 0) return;
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
@@ -191,6 +143,8 @@ const StockDetail: React.FC = () => {
       },
     });
 
+    chartRef.current = chart;
+
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
@@ -210,22 +164,100 @@ const StockDetail: React.FC = () => {
           close: point.close,
         };
       })
-      .filter(d => d.open !== undefined && d.close !== undefined);
+      .filter(d => d.open !== undefined && d.close !== undefined)
+      .sort((a, b) => (a.time as number) - (b.time as number));
 
+    seriesData.current = transformed;
     candleSeries.setData(transformed);
 
+    socket.on("update", (data) => {
+      if (
+        data.symbol === symbol &&
+        data.granularity === selectedGranularity &&
+        data.time && data.open !== undefined && data.close !== undefined
+      ) {
+        const updatedBar = {
+          time: Math.floor(Date.parse(data.time) / 1000) as Time,
+          open: data.open,
+          high: data.high,
+          low: data.low,
+          close: data.close,
+        };
+        seriesData.current.push(updatedBar);
+        seriesData.current.sort((a, b) => (a.time as number) - (b.time as number));
+        candleSeries.setData(seriesData.current);
+      }
+    });
+
+    let isFetching = false;
+
+    const timeRangeHandler = async () => {
+      if (isFetching || !seriesData.current.length) return;
+      if (!chartRef.current) return;
+
+      const earliest = seriesData.current[0].time as number;
+      const from = new Date((earliest - 86400 * 5) * 1000).toISOString(); // 5 days before
+      const to = new Date((earliest - 1) * 1000).toISOString();
+
+      isFetching = true;
+      try {
+        const res = await fetch(`/api/stock/${symbol}/history?granularity=${selectedGranularity}&from=${from}&to=${to}`);
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          const newPoints = data
+            .map((point) => {
+              const timestamp = Date.parse(point.time);
+              return {
+                time: Math.floor(timestamp / 1000) as Time,
+                open: point.open,
+                high: point.high,
+                low: point.low,
+                close: point.close,
+              };
+            })
+            .filter((d) => d.open !== undefined && d.close !== undefined)
+            .sort((a, b) => (a.time as number) - (b.time as number));
+
+          const mergedMap = new Map<number, typeof newPoints[0]>();
+
+          [...newPoints, ...seriesData.current].forEach((candle) => {
+            mergedMap.set(candle.time as number, candle); // overwrite duplicates
+          });
+
+          const merged = Array.from(mergedMap.values()).sort(
+            (a, b) => (a.time as number) - (b.time as number)
+          );
+
+          seriesData.current = merged;
+          candleSeries.setData(merged);
+        }
+      } catch (err) {
+        console.error("Lazy load error:", err);
+      } finally {
+        isFetching = false;
+      }
+    };
+
     const resizeObserver = new ResizeObserver(() => {
+      if (!chartRef.current) return;
+      const chart = chartRef.current;
       if (chartContainerRef.current) {
         chart.applyOptions({ width: chartContainerRef.current.clientWidth });
       }
     });
     resizeObserver.observe(chartContainerRef.current);
 
+    chart.timeScale().subscribeVisibleTimeRangeChange(timeRangeHandler);
+
     return () => {
+      chartRef.current = null;
       resizeObserver.disconnect();
       chart.remove();
+      socket.off("update");
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(timeRangeHandler);
     };
-  }, [historyCache, selectedGranularity]);
+  }, [historyCache, selectedGranularity, symbol]);
 
   if (error) return <p className="text-red-500 p-4">{error}</p>;
   if (isLoading || !stock) return <p className="p-4">Loading...</p>;

@@ -1,6 +1,9 @@
 import requests, os
 import pickle
 from cache.redis_client import redis_conn
+from dotenv import load_dotenv, find_dotenv
+
+load_dotenv(find_dotenv())
 
 def generate_ai_summary(info: dict) -> list:
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -18,7 +21,9 @@ def generate_ai_summary(info: dict) -> list:
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Referer": "http://localhost",
+        "HTTP-Referer": "http://localhost"
     }
 
     important_keys = ['MarketCapitalization', 'PERatio', 'ProfitMargin', 'Beta', 'Sector', 'Name']
