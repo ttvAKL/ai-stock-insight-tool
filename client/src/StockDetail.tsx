@@ -170,7 +170,13 @@ const StockDetail: React.FC = () => {
     seriesData.current = transformed;
     candleSeries.setData(transformed);
 
+    console.log("[Socket Setup] Listening for updates...");
+    // Temporary wildcard debug
+    socket.onAny((event, ...args) => {
+      console.log(`[Socket DEBUG] Event: ${event}`, ...args);
+    });
     socket.on("update", (data) => {
+      console.log("[Socket Event] Update event received", data);
       if (
         data.symbol === symbol &&
         data.granularity === selectedGranularity &&
@@ -183,9 +189,30 @@ const StockDetail: React.FC = () => {
           low: data.low,
           close: data.close,
         };
-        seriesData.current.push(updatedBar);
-        seriesData.current.sort((a, b) => (a.time as number) - (b.time as number));
-        candleSeries.setData(seriesData.current);
+
+        console.log("[Socket Update] Received update:", updatedBar);
+
+        // Prevent duplicate time values; update if exists, else push
+        const existingIndex = seriesData.current.findIndex(bar => bar.time === updatedBar.time);
+        if (existingIndex !== -1) {
+          seriesData.current[existingIndex] = updatedBar;
+        } else {
+          seriesData.current.push(updatedBar);
+        }
+
+        // Sort and remove any accidental duplicates by time (should be unique)
+        seriesData.current = Array.from(
+          new Map(seriesData.current.map(bar => [bar.time, bar])).values()
+        ).sort((a, b) => (a.time as number) - (b.time as number));
+
+        // Only update chart if new update differs in time from last data point
+        const lastData = seriesData.current[seriesData.current.length - 1];
+        if (lastData && lastData.time === updatedBar.time) {
+          candleSeries.setData([...seriesData.current]);
+        }
+        else {
+          console.log("[Socket Event] Skipped update - mismatch in time or no new candle");
+        }
       }
     });
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './index.css'; // or a global CSS file if using one
@@ -21,16 +22,15 @@ interface StockData {
   categoryTags?: string[];
 }
 
-const getRecommendedTickers = (profile: string): string[] => {
-  switch (profile) {
-    case 'Growth Seeker':
-      return ['TSLA', 'NVDA', 'AMZN'];
-    case 'Cautious Planner':
-      return ['JNJ', 'VZ', 'KO'];
-    case 'Dividend Hunter':
-      return ['T', 'PG', 'O'];
-    default:
-      return ['AAPL', 'MSFT', 'TSLA'];
+const getRecommendedTickers = (): string[] => {
+  try {
+    const full = localStorage.getItem('investorProfileFull');
+    if (!full) return ['AAPL', 'MSFT', 'TSLA'];
+    const parsed = JSON.parse(full);
+    return Array.isArray(parsed.recommended_stocks) ? parsed.recommended_stocks : ['AAPL', 'MSFT', 'TSLA'];
+  } catch (e) {
+    console.error("Failed to parse investorProfileFull:", e);
+    return ['AAPL', 'MSFT', 'TSLA'];
   }
 };
 
@@ -42,8 +42,7 @@ const Home: React.FC = () => {
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(() => {
     const saved = localStorage.getItem('watchlistSymbols');
     const stored = saved ? JSON.parse(saved) : [];
-    const profile = localStorage.getItem('investorProfile');
-    const recommended = profile ? getRecommendedTickers(profile) : ['AAPL', 'MSFT', 'TSLA'];
+    const recommended = getRecommendedTickers();
     const combined = Array.from(new Set([...stored, ...recommended]));
     localStorage.setItem('watchlistSymbols', JSON.stringify(combined));
     return combined;
@@ -53,6 +52,34 @@ const Home: React.FC = () => {
   const [showDuplicateNotice, setShowDuplicateNotice] = useState(false);
   const [removingSymbols, setRemovingSymbols] = useState<string[]>([]);
   const [justAddedSymbols, setJustAddedSymbols] = useState<string[]>([]);
+
+  const token = localStorage.getItem("jwtToken");
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const res = await fetch("http://localhost:3000/api/user-data", { 
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        });
+        if (!res.ok) throw new Error("Failed to fetch user data");
+        const data = await res.json();
+        if (data.profile) {
+          localStorage.setItem("investorProfileFull", JSON.stringify(data.profile));
+        }
+        if (Array.isArray(data.watchlist)) {
+          localStorage.setItem("watchlistSymbols", JSON.stringify(data.watchlist));
+          setWatchlistSymbols(data.watchlist);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user data:", err);
+      }
+    };
+
+    fetchUserData();
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -66,14 +93,13 @@ const Home: React.FC = () => {
       let symbols: string[] = [];
 
       if (activeCategory === 'Watchlist') {
-        const profile = localStorage.getItem('investorProfile');
-        const recommended = profile ? getRecommendedTickers(profile) : ['AAPL', 'MSFT', 'TSLA'];
+        const recommended = getRecommendedTickers();
         const combined = Array.from(new Set([...recommended, ...watchlistSymbols]));
         const results: StockData[] = [];
 
         for (const symbol of combined) {
           try {
-            const url = `/api/stock/${symbol}`;
+            const url = `http://localhost:3000/api/stock/${symbol}`;
             const res = await fetch(url);
             const data = await res.json();
             if (!data.error) {
@@ -95,7 +121,7 @@ const Home: React.FC = () => {
       const results: StockData[] = [];
       for (const symbol of symbols) {
         try {
-          const url = `/api/stock/${symbol}`;
+          const url = `http://localhost:3000/api/stock/${symbol}`;
           const res = await fetch(url);
           const data = await res.json();
           if (!data.error) {
@@ -111,17 +137,28 @@ const Home: React.FC = () => {
     };
 
     fetchCategoryStocks();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategory]);
 
   // Toggle a stock in the persistent watchlist, remove from display if on Watchlist tab and unstarred
-  const toggleWatchlist = (symbol: string) => {
+  const toggleWatchlist = async (symbol: string) => {
     if (watchlistSymbols.includes(symbol)) {
       setRemovingSymbols((prev) => [...prev, symbol]);
-      setTimeout(() => {
+      setTimeout(async () => {
         setWatchlistSymbols((prev) => {
           const updated = prev.filter((s) => s !== symbol);
           localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
+          // Backend sync
+          (async () => {
+            await fetch("http://localhost:3000/api/user-data", {
+              method: "POST",
+              credentials: 'include',
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                watchlist: updated,
+                profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),
+              }),
+            });
+          })();
           return updated;
         });
         setCategoryStocks((prev) => prev.filter((s) => s.symbol !== symbol));
@@ -131,6 +168,16 @@ const Home: React.FC = () => {
       const updated = [...watchlistSymbols, symbol];
       setWatchlistSymbols(updated);
       localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
+      // Backend sync
+      await fetch("http://localhost:3000/api/user-data", {
+        method: "POST",
+        credentials: 'include',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          watchlist: updated,
+          profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),
+        }),
+      });
       setJustAddedSymbols((prev) => [...prev, symbol]);
       setTimeout(() => {
         setJustAddedSymbols((prev) => prev.filter((s) => s !== symbol));
@@ -148,7 +195,7 @@ const Home: React.FC = () => {
       return;
     }
     try {
-      const res = await fetch(`/api/stock/${symbol}`);
+      const res = await fetch(`http://localhost:3000/api/stock/${symbol}`);
       const data = await res.json();
       if (!data.error) {
         // Trigger AI summary generation
@@ -157,6 +204,16 @@ const Home: React.FC = () => {
           const newWatchlist = [...watchlistSymbols, symbol];
           setWatchlistSymbols(newWatchlist);
           localStorage.setItem('watchlistSymbols', JSON.stringify(newWatchlist));
+          // Backend sync
+          await fetch("http://localhost:3000/api/user-data", {
+            method: "POST",
+            credentials: 'include',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              watchlist: newWatchlist,
+              profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),
+            }),
+          });
           setJustAddedSymbols((prev) => [...prev, symbol]);
           setTimeout(() => {
             setJustAddedSymbols((prev) => prev.filter((s) => s !== symbol));
@@ -166,7 +223,7 @@ const Home: React.FC = () => {
         }
 
         try {
-          await fetch(`/api/stock/${symbol}/generate-summary`, { method: 'POST' });
+          await fetch(`http://localhost:3000/api/stock/${symbol}/generate-summary`, { method: 'POST' });
         } catch (summaryError) {
           console.error(`Failed to generate summary for ${symbol}`, summaryError);
         }

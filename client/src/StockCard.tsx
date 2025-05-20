@@ -66,12 +66,27 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
     close: parseFloat(data.close)
   });
   const [prevOhlc, setPrevOhlc] = useState(ohlc);
-  const [socketReceived, setSocketReceived] = useState(false);
+  const [, setSocketReceived] = useState(false);
   const fallbackTriggered = useRef(false);
+
+  const isMarketClosed = () => {
+    const now = new Date();
+    const day = now.getUTCDay();
+    const hours = now.getUTCHours();
+    const minutes = now.getUTCMinutes();
+
+    // Market is closed on weekends
+    if (day === 6 || day === 0) return true;
+
+    // Market open from 13:30 to 20:00 UTC (9:30 AM to 4:00 PM ET)
+    const totalMinutes = hours * 60 + minutes;
+    return totalMinutes < 13 * 60 + 30 || totalMinutes >= 20 * 60;
+  };
 
   // Fallback fetch for two most recent 1min OHLCs
   const fetchRecentOhlc = async () => {
     try {
+      console.log("[Fallback] Fetching recent OHLC for", data.symbol);
       const now = new Date();
       const day = now.getUTCDay();
       const hours = now.getUTCHours();
@@ -106,11 +121,15 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
         params: { granularity: '1min', from: start, to: end, full: true }
       });
 
+      console.log("[Fallback] Response:", res.data);
+
       const candles = res.data || [];
 
       if (candles.length >= 2) {
         const latest = candles[candles.length - 1];
         const previous = candles[candles.length - 2];
+
+        console.log("[Fallback] Updating with recent candles", { latest, previous });
 
         setPrevOhlc({
           open: previous.open,
@@ -124,6 +143,8 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
           low: latest.low,
           close: latest.close
         });
+      } else {
+        console.log("[Fallback] Not enough candles received", candles);
       }
     } catch (error) {
       console.error("Failed to fetch fallback OHLC:", error);
@@ -133,9 +154,16 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
   useEffect(() => {
     const handleUpdate = (msg: OhlcMessage) => {
       console.log("[Socket Update]", msg);
-      if (msg.symbol !== data.symbol || msg.granularity !== '1min') return;
-      if (!msg.open || !msg.high || !msg.low || !msg.close) return;
+      if (msg.symbol !== data.symbol || msg.granularity !== '1min') {
+        console.log("[Skip] Symbol mismatch or incorrect granularity", msg.symbol, msg.granularity);
+        return;
+      }
+      if (!msg.open || !msg.high || !msg.low || !msg.close) {
+        console.log("[Skip] Incomplete OHLC data", msg);
+        return;
+      }
 
+      console.log("[Accepted] Updating OHLC with", msg);
       setSocketReceived(true);
       const newOhlc = {
         open: msg.open,
@@ -149,17 +177,14 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
 
     socket.on('update', handleUpdate);
 
-
-    const fallbackTimeout = setTimeout(() => {
-      if (!socketReceived && !fallbackTriggered.current) {
-        fallbackTriggered.current = true;
-        fetchRecentOhlc();
-      }
-    }, 3000); // extend to 5s for reliability
+    if (isMarketClosed() && !fallbackTriggered.current) {
+      console.log("[Fallback] Market is closed, triggering fallback OHLC fetch");
+      fallbackTriggered.current = true;
+      fetchRecentOhlc();
+    }
 
     return () => {
       socket.off('update', handleUpdate);
-      clearTimeout(fallbackTimeout);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.symbol, ohlc]);

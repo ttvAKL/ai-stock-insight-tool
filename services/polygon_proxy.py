@@ -11,8 +11,6 @@ load_dotenv()
 
 API_KEY = os.getenv("POLYGON_API_KEY")
 
-print(API_KEY)
-
 ws_client = WebSocketClient(
     api_key=API_KEY,
     feed=Feed.Delayed,
@@ -34,6 +32,7 @@ def handle_msg(messages: List[WebSocketMessage]):
 
 def run_polygon_proxy():
     print("Starting Polygon WebSocket proxy...")
+    print(f"[Proxy Init] Using API Key: {'SET' if API_KEY else 'MISSING'}")
     ws_client.subscribe("AM.*")
     print("Subscribed to Polygon aggregate feed: AM.*")
     ws_client.run(handle_msg)

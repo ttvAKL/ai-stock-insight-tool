@@ -1,0 +1,50 @@
+from flask import Blueprint, request, jsonify
+import os
+import jwt
+from db import db, UserProfile
+from services.auth_utils import get_jwt_email
+
+user_data_bp = Blueprint("user_data", __name__)
+
+@user_data_bp.route("/api/user-data", methods=["GET"])
+def get_user_data():
+    email = get_jwt_email()
+    if not email:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    profile = UserProfile.query.filter_by(email=email).first()
+    if not profile:
+        return jsonify({"profile": None, "watchlist": []})
+    
+    return jsonify({
+        "profile": profile.investor_profile,
+        "watchlist": profile.watchlist_symbols or []
+    })
+
+@user_data_bp.route("/api/user-data", methods=["POST"])
+def update_user_data():
+    email = get_jwt_email()
+    if not email:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json()
+    investor_profile = data.get("profile")
+    watchlist = data.get("watchlist")
+
+    try:
+        merged_profile = UserProfile(
+            email=email,
+            investor_profile=investor_profile,
+            watchlist_symbols=watchlist
+        )
+        db.session.merge(merged_profile)
+
+        db.session.flush()
+
+        db.session.commit()
+    except Exception as e:
+        print("[user_data] DB error during save:", e)
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    return jsonify({"success": True})

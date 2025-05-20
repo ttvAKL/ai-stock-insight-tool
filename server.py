@@ -8,7 +8,7 @@ from jobs.tasks import fetch_and_cache_symbol
 from routes.stock import stock_bp
 import json
 from flask_socketio import SocketIO
-from client.src.utils.auth_utils import verify_jwt_token
+from services.auth_utils import verify_jwt_token
 from services.polygon_proxy import run_polygon_proxy, subscribe_callback
 
 load_dotenv(find_dotenv())

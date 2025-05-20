@@ -1,18 +1,26 @@
-import redis
+import requests
 from flask import Blueprint, jsonify, request
-import requests, os
+import os
+
 from dotenv import load_dotenv, find_dotenv
 from services.summary_generator import generate_ai_summary
 from services.financials import interpret_financials
 from services.ticker_utils import get_ticker_suggestions
-from datetime import datetime, timedelta
+from datetime import datetime
+import yfinance as yf
+from functools import lru_cache
 
 load_dotenv(find_dotenv())
 
-redis_conn = redis.Redis(host='localhost', port=6379, db=0)
 
 stock_bp = Blueprint('stock', __name__, url_prefix='/api/stock')
 
+@lru_cache(maxsize=128)
+def fetch_yf_info(symbol: str) -> dict:
+    """
+    Cached lookup of ticker.info via yfinance for faster repeated calls.
+    """
+    return yf.Ticker(symbol).info or {}
 
 def fetch_polygon_news(ticker):
     api_key = os.getenv("POLYGON_API_KEY")
@@ -48,7 +56,6 @@ def get_stock_data(symbol):
             return num
 
     try:
-        print(f"🪪 Requested symbol: {symbol}")
         POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
         ohlc_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol.upper()}/prev?adjusted=true&apiKey={POLYGON_API_KEY}"
@@ -61,57 +68,53 @@ def get_stock_data(symbol):
         close_price = ohlc_data.get("c", "N/A")
         volume = ohlc_data.get("v", "N/A")
 
-        financials_url = f"https://api.polygon.io/vX/reference/financials?ticker={symbol.upper()}&limit=1&apiKey={POLYGON_API_KEY}"
-        financials_res = requests.get(financials_url)
-        financials_data = financials_res.json().get("results", [])
-
-        eps = None
-
-        ref_url = f"https://api.polygon.io/v3/reference/tickers/{symbol.upper()}?apiKey={POLYGON_API_KEY}"
-        ref_res = requests.get(ref_url)
-        ref_data = ref_res.json().get("results", {})
-
-        overview = {
-            "Name": ref_data.get("name", symbol.upper()),
-            "Symbol": symbol.upper(),
-            "Sector": ref_data.get("sic_description", "N/A"),
-            "MarketCapitalization": "N/A",
-            "PERatio": "N/A",
-            "EPS": eps or "N/A",
-            "ProfitMargin": "N/A"
-        }
-
-        revenue = None
-        net_income = None
-
-        if financials_data:
-            report = financials_data[0]
-            fundamentals = report.get("financials", {})
-            income = fundamentals.get("income_statement", {})
-            balance = fundamentals.get("balance_sheet", {})
-            metrics = report.get("market_data", {})
-
-            revenue = income.get("revenues", {}).get("value")
-            net_income = income.get("net_income_loss", {}).get("value")
-            eps = income.get("diluted_earnings_per_share", {}).get("value") or income.get("basic_earnings_per_share", {}).get("value")
-            market_cap = ref_data.get("market_cap")
-
-            if not market_cap and close_price and income.get("diluted_average_shares", {}).get("value"):
-                shares = income.get("diluted_average_shares", {}).get("value")
-                market_cap = close_price * shares
-
-            pe_ratio = round(market_cap / net_income, 1) if market_cap and net_income else "N/A"
-
-            overview.update({
-                "MarketCapitalization": format_large_number(market_cap),
-                "PERatio": pe_ratio,
-                "ProfitMargin": f"{round(net_income / revenue * 100, 1)}%" if revenue and net_income else "N/A",
-                "EPS": eps or "N/A"
-            })
-        else:
-            print(f"[DEBUG] No financials data found for {symbol}")
-
-        overview["PERatio"] = overview["PERatio"] if isinstance(overview["PERatio"], str) else round(overview["PERatio"], 1)
+        # Fetch fundamentals via yfinance
+        try:
+            info = fetch_yf_info(symbol.upper())
+            # Determine sector: ETF or company sector
+            quote_type = info.get("quoteType", "").upper()
+            sector = "ETF" if quote_type == "ETF" else info.get("sector", "N/A")
+            # Base overview
+            overview = {
+                "Name": info.get("longName", symbol.upper()),
+                "Symbol": symbol.upper(),
+                "Sector": sector,
+                "MarketCapitalization": info.get("marketCap", "N/A"),
+                "PERatio": info.get("trailingPE", "N/A"),
+                "EPS": info.get("trailingEps", "N/A"),
+                "DividendYield": info.get("dividendYield", "N/A"),
+            }
+            # Add revenue and net income for companies
+            if quote_type != "ETF":
+                try:
+                    fin_df = yf.Ticker(symbol.upper()).financials
+                    overview["revenue"] = (
+                        fin_df.loc["Total Revenue"].iloc[0]
+                        if "Total Revenue" in fin_df.index else "N/A"
+                    )
+                    overview["net_income"] = (
+                        fin_df.loc["Net Income"].iloc[0]
+                        if "Net Income" in fin_df.index else "N/A"
+                    )
+                except Exception:
+                    overview["revenue"] = "N/A"
+                    overview["net_income"] = "N/A"
+            else:
+                overview["revenue"] = "N/A"
+                overview["net_income"] = "N/A"
+        except Exception as e:
+            print(f"[stock] yfinance lookup failed for {symbol}: {e}")
+            overview = {
+                "Name": symbol.upper(),
+                "Symbol": symbol.upper(),
+                "Sector": "ETF" if symbol.upper().endswith("X") else "N/A",
+                "MarketCapitalization": "N/A",
+                "PERatio": "N/A",
+                "EPS": "N/A",
+                "DividendYield": "N/A",
+                "revenue": "N/A",
+                "net_income": "N/A",
+            }
 
         summary = generate_ai_summary(overview)
         fin_summary = interpret_financials(overview)
@@ -133,12 +136,8 @@ def get_stock_data(symbol):
             "market_cap": overview["MarketCapitalization"],
             "pe_ratio": overview["PERatio"],
             "eps": overview["EPS"],
-            "profit_margin": overview["ProfitMargin"],
             "ai_summary": summary,
             "categoryTags": category_tags,
-            "description": ref_data.get("description", "N/A"),
-            "revenue": format_large_number(revenue),
-            "net_income": format_large_number(net_income),
             "news": news,
             "open": open_price,
             "high": high_price,
@@ -147,6 +146,8 @@ def get_stock_data(symbol):
             "volume": format_large_number(volume),
             "change": round(close_price - open_price, 2) if isinstance(open_price, (int, float)) and isinstance(close_price, (int, float)) else "N/A",
             "percent_change": f"{round(((close_price - open_price) / open_price) * 100, 2)}%" if isinstance(open_price, (int, float)) and open_price != 0 else "N/A",
+            "revenue": overview.get("revenue"),
+            "net_income": overview.get("net_income"),
         }
 
         return jsonify(response_data)

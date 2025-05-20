@@ -14,7 +14,6 @@ def generate_ai_summary(info: dict) -> list:
         try:
             summary = pickle.loads(cached_summary)
             if summary and isinstance(summary, list):
-                print(f"✅ Loaded cached AI summary for {symbol}")
                 return summary
         except Exception:
             print(f"⚠️ Failed to load cached summary for {symbol}, regenerating...")
