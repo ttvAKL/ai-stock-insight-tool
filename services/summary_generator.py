@@ -2,14 +2,18 @@ import requests, os
 import pickle
 from cache.redis_client import redis_conn
 from dotenv import load_dotenv, find_dotenv
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 load_dotenv(find_dotenv())
 
-def generate_ai_summary(info: dict) -> list:
+def generate_ai_summary(info: dict, symbol) -> list:
     api_key = os.getenv("OPENROUTER_API_KEY")
-    symbol = info.get("Symbol")
     cache_key = f"summary_{symbol}"
-    cached_summary = redis_conn.get(cache_key)
+    try:
+        cached_summary = redis_conn.get(cache_key)
+    except RedisConnectionError as e:
+        print(f"[summary_generator] Redis connection unavailable for get: {e}")
+        cached_summary = None
     if cached_summary:
         try:
             summary = pickle.loads(cached_summary)
@@ -25,23 +29,11 @@ def generate_ai_summary(info: dict) -> list:
         "HTTP-Referer": "http://localhost"
     }
 
-    important_keys = ['MarketCapitalization', 'PERatio', 'ProfitMargin', 'Beta', 'Sector', 'Name']
-    filled_keys = [k for k in important_keys if k in info and info[k]]
-    is_thin_info = len(filled_keys) <= 2
-
-    if is_thin_info:
-        prompt = f"""
-You are a financial assistant. Based on limited metadata about this company, provide a basic short stock summary (3-4 bullet points) about what the company likely does, its sector, and one simple investing consideration. Keep it simple and general.
-
-Here is the partial stock info:
-{info}
-"""
-    else:
-        prompt = f"""
+    prompt = f"""
 You are a professional stock market analyst. Given the detailed stock information below, produce a short, clean bullet point summary (4–5 points) for an investor.
 
 Follow this structure:
-- 1–2 financial strengths or risks (based on PE Ratio, Beta, Profit Margin, etc).
+- 1–2 financial strengths or risks (based on available metrics).
 - Valuation or sentiment hint if any (based on data).
 - 1–2 short investment considerations.
 
@@ -70,7 +62,10 @@ Here is the stock data:
             print(f"⚠️ AI returned empty or malformed summary list for {symbol}")
             return ["Summary unavailable."]
 
-        redis_conn.set(cache_key, pickle.dumps(summary_list))
+        try:
+            redis_conn.set(cache_key, pickle.dumps(summary_list))
+        except RedisConnectionError as e:
+            print(f"[summary_generator] Redis connection unavailable for set: {e}")
         return summary_list
     except requests.exceptions.HTTPError as err:
         print(f"HTTP Error: {err.response.status_code} - {err.response.text}")

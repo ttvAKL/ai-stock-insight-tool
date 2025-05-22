@@ -1,0 +1,18 @@
+export const METRIC_DEFINITIONS: Record<string, string> = {
+  "Market Cap": "The total value of a company's shares on the stock market.",
+  "P/E Ratio": "Price-to-Earnings Ratio: compares a company's share price to its earnings per share.",
+  "Previous Close": "The last price at which the stock traded during the previous trading day.",
+  "Open": "The price at which a stock first trades when the market opens.",
+  "Bid": "The highest price a buyer is willing to pay for a stock.",
+  "Ask": "The lowest price a seller will accept for a stock.",
+  "Day's Range": "The lowest and highest prices at which a stock has traded during the day.",
+  "52 Week Range": "The lowest and highest prices at which a stock has traded in the past year.",
+  "Volume": "The total number of shares traded during a specific period.",
+  "Avg. Volume": "The average number of shares traded per day over a set period.",
+  "Net Assets": "The total value of a fund's assets minus its liabilities.",
+  "NAV": "Net Asset Value: the price per share of a mutual fund or ETF.",
+  "PE Ratio (TTM)": "Price-to-Earnings Ratio based on the last 12 months of earnings.",
+  "Yield": "The income returned on an investment, shown as a percentage of the price.",
+  "YTD Daily Total Return": "Year-to-date return including dividends, measured daily.",
+  "Beta (5Y Monthly)": "A measure of a stock's volatility compared to the market, calculated over 5 years using monthly data.",
+};

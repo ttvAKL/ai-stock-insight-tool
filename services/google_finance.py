@@ -1,9 +1,6 @@
-
-
 import re
 import requests
 from bs4 import BeautifulSoup
-from functools import lru_cache
 
 # Use a realistic desktop User-Agent
 HEADERS = {
@@ -14,17 +11,8 @@ HEADERS = {
     )
 }
 
-@lru_cache(maxsize=128)
+
 def get_google_financials(symbol: str) -> dict:
-    """
-    Scrape key financial metrics from Google Finance.
-    Returns a dict with:
-      - Sector
-      - MarketCapitalization
-      - PERatio
-      - DividendYield
-      - EPS
-    """
     url = f"https://www.google.com/finance/quote/{symbol.upper()}:NASDAQ"
     data = {}
     try:

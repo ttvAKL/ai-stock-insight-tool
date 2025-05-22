@@ -9,8 +9,6 @@ const socket = io("http://localhost:3000", {
   },
 });
 
-
-
 console.log("[Client] Attempting to connect to Socket.IO server...", localStorage.getItem("jwtToken"));
 
 export { socket };
@@ -27,10 +25,11 @@ socket.on("disconnect", (reason) => {
   console.warn("[Client] Socket disconnected:", reason);
 });
 
-socket.on("update", (data) => {
-  console.log("[Client] Received update", data);
+// Debug: log any received event
+socket.onAny((event, ...args) => {
+  console.log(`[Client] Event received: ${event}`, args);
 });
 
-socket.on("connect_error", (err) => {
-  console.error("Socket connection error:", err.message);
+socket.on("update", (data) => {
+  console.log("[Client] Received update", data);
 });

@@ -23,7 +23,6 @@ const AppRoutes: React.FC = () => {
 
   useEffect(() => {
     const token = localStorage.getItem('jwtToken');
-    console.log(token)
 
     const checkUserData = async () => {
       try {
@@ -41,7 +40,6 @@ const AppRoutes: React.FC = () => {
           // No redirect needed; user can access app normally
         } else if (location.pathname !== "/profile") {
           navigate("/profile");
-          console.log(data.profile);
         }
       } catch (e) {
         console.error("Failed to load user data", e);

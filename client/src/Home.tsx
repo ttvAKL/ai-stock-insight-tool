@@ -88,6 +88,8 @@ const Home: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
     const fetchCategoryStocks = async () => {
       setLoading(true);
       let symbols: string[] = [];
@@ -100,13 +102,16 @@ const Home: React.FC = () => {
         for (const symbol of combined) {
           try {
             const url = `http://localhost:3000/api/stock/${symbol}`;
-            const res = await fetch(url);
+            const res = await fetch(url, { signal });
             const data = await res.json();
             if (!data.error) {
               data.source = recommended.includes(symbol) ? 'recommended' : 'user';
               results.push(data);
             }
           } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+              return;
+            }
             console.error(`Failed to fetch ${symbol}`, err);
           }
         }
@@ -122,12 +127,15 @@ const Home: React.FC = () => {
       for (const symbol of symbols) {
         try {
           const url = `http://localhost:3000/api/stock/${symbol}`;
-          const res = await fetch(url);
+          const res = await fetch(url, { signal });
           const data = await res.json();
           if (!data.error) {
             results.push(data);
           }
         } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return;
+          }
           console.error(`Failed to fetch ${symbol}`, err);
         }
       }
@@ -137,7 +145,8 @@ const Home: React.FC = () => {
     };
 
     fetchCategoryStocks();
-  }, [activeCategory]);
+    return () => controller.abort();
+  }, [activeCategory]); // watchlistSymbols updates are handled manually via toggleWatchlist/handleSearch
 
   // Toggle a stock in the persistent watchlist, remove from display if on Watchlist tab and unstarred
   const toggleWatchlist = async (symbol: string) => {
@@ -152,7 +161,10 @@ const Home: React.FC = () => {
             await fetch("http://localhost:3000/api/user-data", {
               method: "POST",
               credentials: 'include',
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
               body: JSON.stringify({
                 watchlist: updated,
                 profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),
@@ -172,7 +184,10 @@ const Home: React.FC = () => {
       await fetch("http://localhost:3000/api/user-data", {
         method: "POST",
         credentials: 'include',
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({
           watchlist: updated,
           profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),
@@ -208,7 +223,10 @@ const Home: React.FC = () => {
           await fetch("http://localhost:3000/api/user-data", {
             method: "POST",
             credentials: 'include',
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`,
+            },
             body: JSON.stringify({
               watchlist: newWatchlist,
               profile: JSON.parse(localStorage.getItem("investorProfileFull") || "null"),

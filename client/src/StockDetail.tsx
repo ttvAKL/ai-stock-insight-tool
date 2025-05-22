@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { createChart, CrosshairMode, CandlestickSeries, Time, CandlestickData, IChartApi } from 'lightweight-charts';
 import { socket } from './socket';
+import { METRIC_DEFINITIONS } from './metricDefinitions';
 
 interface StockData {
   symbol: string;
@@ -20,7 +21,22 @@ interface StockData {
   description?: string;
   revenue?: number;
   net_income?: number;
-  eps?: number;
+
+  // Yahoo overview metrics
+  'Previous Close'?: number;
+  'Open'?: number;
+  'Bid'?: string;
+  'Ask'?: string;
+  "Day's Range"?: string;
+  '52 Week Range'?: string;
+  'Volume'?: number;
+  'Avg. Volume'?: number;
+  'Net Assets'?: number;
+  'NAV'?: number;
+  'PE Ratio (TTM)'?: number;
+  'Yield'?: number;
+  'YTD Daily Total Return'?: number;
+  'Beta (5Y Monthly)'?: number;
 }
 
 interface HistoryPoint {
@@ -43,6 +59,8 @@ const StockDetail: React.FC = () => {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isLoading, setIsLoading] = useState(true);
   const [marketStatus, setMarketStatus] = useState<'open' | 'closed' | null>(null);
+  const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
+
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const seriesData = useRef<CandlestickData<Time>[]>([]);
   const chartRef = useRef<IChartApi | null>(null);
@@ -74,19 +92,7 @@ const StockDetail: React.FC = () => {
         const meta = await metaRes.json();
 
         if (!meta.error) {
-          setStock({
-            symbol: meta.symbol,
-            name: meta.name,
-            sector: meta.sector,
-            market_cap: meta.market_cap,
-            pe_ratio: meta.pe_ratio,
-            ai_summary: meta.ai_summary,
-            news: meta.news || [],
-            description: meta.description,
-            revenue: meta.revenue,
-            net_income: meta.net_income,
-            eps: meta.eps,
-          });
+          setStock(meta as StockData);
         }
 
         const historyRequests = granularities.map(async (g) => {
@@ -171,6 +177,8 @@ const StockDetail: React.FC = () => {
     candleSeries.setData(transformed);
 
     console.log("[Socket Setup] Listening for updates...");
+    // Tell the server we want live updates for this symbol
+    socket.emit('subscribe', symbol);
     // Temporary wildcard debug
     socket.onAny((event, ...args) => {
       console.log(`[Socket DEBUG] Event: ${event}`, ...args);
@@ -281,6 +289,8 @@ const StockDetail: React.FC = () => {
       chartRef.current = null;
       resizeObserver.disconnect();
       chart.remove();
+      // Unsubscribe from live updates
+      socket.emit('unsubscribe', symbol);
       socket.off("update");
       chart.timeScale().unsubscribeVisibleTimeRangeChange(timeRangeHandler);
     };
@@ -289,13 +299,33 @@ const StockDetail: React.FC = () => {
   if (error) return <p className="text-red-500 p-4">{error}</p>;
   if (isLoading || !stock) return <p className="p-4">Loading...</p>;
 
+  // Define metrics as tuples of [label, value]
+  const metrics: [string, string | number | undefined][] = [
+    ['Market Cap', stock.market_cap?.toLocaleString()],
+    ['P/E Ratio', stock.pe_ratio],
+    ['Previous Close', stock['Previous Close']],
+    ['Open', stock['Open']],
+    ['Bid', stock['Bid']],
+    ['Ask', stock['Ask']],
+    ["Day's Range", stock["Day's Range"]],
+    ['52 Week Range', stock['52 Week Range']],
+    ['Volume', stock['Volume']],
+    ['Avg. Volume', stock['Avg. Volume']],
+    ['Net Assets', stock['Net Assets']],
+    ['NAV', stock['NAV']],
+    ['PE Ratio (TTM)', stock['PE Ratio (TTM)']],
+    ['Yield', stock['Yield']],
+    ['YTD Daily Total Return', stock['YTD Daily Total Return']],
+    ['Beta (5Y Monthly)', stock['Beta (5Y Monthly)']],
+  ];
+
   return (
     <div
       className="w-full max-w-8xl mx-auto p-6 bg-white shadow-md rounded-lg mt-6"
       style={{ minWidth: `${Math.min(windowWidth, 1536)}px` }}
     >
       <h1 className="text-3xl font-bold mb-2">{stock.name || stock.symbol}</h1>
-      <p className="text-sm text-gray-500 mb-4">Sector: {stock.sector || 'N/A'}</p>
+      <p className="text-sm text-gray-500 mb-4">Sector: {stock.sector || '-'}</p>
 
       {marketStatus === 'closed' && (
         <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-4 text-sm">
@@ -319,13 +349,32 @@ const StockDetail: React.FC = () => {
       {/* Stock Chart */}
       <div ref={chartContainerRef} className="h-96 bg-white mb-6" />
 
-      {/* Stock Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <div><strong>Market Cap:</strong> {stock.market_cap?.toLocaleString() || 'N/A'}</div>
-        <div><strong>P/E Ratio:</strong> {stock.pe_ratio ?? 'N/A'}</div>
-        <div><strong>Revenue (TTM):</strong> {stock.revenue?.toLocaleString() || 'N/A'}</div>
-        <div><strong>Net Income (TTM):</strong> {stock.net_income?.toLocaleString() || 'N/A'}</div>
-        <div><strong>Earnings Per Share (TTM):</strong> {stock.eps ?? 'N/A'}</div>
+      {/* Stock Stats including Yahoo overview metrics */}
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-6"
+        onClick={() => setExpandedMetric(null)}
+      >
+        {metrics.map(([label, value]) => (
+          <div
+            key={label}
+            className="bg-gray-50 p-3 rounded-lg shadow-sm cursor-pointer relative"
+            onClick={e => { e.stopPropagation(); setExpandedMetric(expandedMetric === label ? null : label); }}
+          >
+            <p className="text-sm text-gray-600">
+              {label}
+            </p>
+            <p className="text-lg font-medium text-gray-900">{value != null ? value : '-'}</p>
+            <div
+              className={
+                `mt-2 text-sm text-gray-700 bg-white p-2 border border-gray-200 rounded shadow-lg absolute top-full left-0 w-full z-10
+                transform transition-all duration-200 ease-out
+                ${expandedMetric === label ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`
+              }
+            >
+              {METRIC_DEFINITIONS[label] || 'No definition available.'}
+            </div>
+          </div>
+        ))}
       </div>
 
       {stock.description && (

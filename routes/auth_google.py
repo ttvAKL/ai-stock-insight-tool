@@ -23,6 +23,7 @@ def register_oauth(app):
 
 @auth_bp.route('/auth/google')
 def login():
+    print('def login hit!')
     redirect_uri = url_for('auth.auth_callback', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
 

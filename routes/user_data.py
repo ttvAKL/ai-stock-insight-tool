@@ -1,6 +1,4 @@
 from flask import Blueprint, request, jsonify
-import os
-import jwt
 from db import db, UserProfile
 from services.auth_utils import get_jwt_email
 
@@ -28,6 +26,7 @@ def update_user_data():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json()
+
     investor_profile = data.get("profile")
     watchlist = data.get("watchlist")
 

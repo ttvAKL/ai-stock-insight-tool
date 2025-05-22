@@ -26,14 +26,6 @@ def get_jwt_email():
     except jwt.InvalidTokenError as e:
         print(f"[user_data] JWT decode error: {e}")
         return None
-
-def verify_jwt_token(token):
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload.get("user_id")
-    except (jwt.ExpiredSignatureError, jwt.InvalidTokenError) as e:
-        print(f"[JWT] Invalid token: {e}")
-        return False
     
 def generate_jwt_token(user_info):
     payload = {

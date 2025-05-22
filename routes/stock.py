@@ -2,12 +2,15 @@ import requests
 from flask import Blueprint, jsonify, request
 import os
 
+from redis.exceptions import ConnectionError as RedisConnectionError
+
 from dotenv import load_dotenv, find_dotenv
 from services.summary_generator import generate_ai_summary
 from services.financials import interpret_financials
 from services.ticker_utils import get_ticker_suggestions
-from datetime import datetime
+from services.yahoo_client import fetch_yahoo_quote_json
 import yfinance as yf
+from datetime import datetime
 from functools import lru_cache
 
 load_dotenv(find_dotenv())
@@ -20,7 +23,7 @@ def fetch_yf_info(symbol: str) -> dict:
     """
     Cached lookup of ticker.info via yfinance for faster repeated calls.
     """
-    return yf.Ticker(symbol).info or {}
+    return {}
 
 def fetch_polygon_news(ticker):
     api_key = os.getenv("POLYGON_API_KEY")
@@ -53,7 +56,7 @@ def get_stock_data(symbol):
                 num /= 1000.0
             return f"{num:.1f} P"
         except:
-            return num
+            return "-"
 
     try:
         POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
@@ -62,62 +65,48 @@ def get_stock_data(symbol):
         ohlc_res = requests.get(ohlc_url)
         ohlc_data = ohlc_res.json().get("results", [{}])[0]
 
-        open_price = ohlc_data.get("o", "N/A")
-        high_price = ohlc_data.get("h", "N/A")
-        low_price = ohlc_data.get("l", "N/A")
-        close_price = ohlc_data.get("c", "N/A")
-        volume = ohlc_data.get("v", "N/A")
+        open_price = ohlc_data.get("o", "-")
+        high_price = ohlc_data.get("h", "-")
+        low_price = ohlc_data.get("l", "-")
+        close_price = ohlc_data.get("c", "-")
+        volume = ohlc_data.get("v", "-")
 
-        # Fetch fundamentals via yfinance
+        # Fetch Yahoo Finance overview metrics
         try:
-            info = fetch_yf_info(symbol.upper())
-            # Determine sector: ETF or company sector
-            quote_type = info.get("quoteType", "").upper()
-            sector = "ETF" if quote_type == "ETF" else info.get("sector", "N/A")
-            # Base overview
-            overview = {
-                "Name": info.get("longName", symbol.upper()),
-                "Symbol": symbol.upper(),
-                "Sector": sector,
-                "MarketCapitalization": info.get("marketCap", "N/A"),
-                "PERatio": info.get("trailingPE", "N/A"),
-                "EPS": info.get("trailingEps", "N/A"),
-                "DividendYield": info.get("dividendYield", "N/A"),
-            }
-            # Add revenue and net income for companies
-            if quote_type != "ETF":
-                try:
-                    fin_df = yf.Ticker(symbol.upper()).financials
-                    overview["revenue"] = (
-                        fin_df.loc["Total Revenue"].iloc[0]
-                        if "Total Revenue" in fin_df.index else "N/A"
-                    )
-                    overview["net_income"] = (
-                        fin_df.loc["Net Income"].iloc[0]
-                        if "Net Income" in fin_df.index else "N/A"
-                    )
-                except Exception:
-                    overview["revenue"] = "N/A"
-                    overview["net_income"] = "N/A"
-            else:
-                overview["revenue"] = "N/A"
-                overview["net_income"] = "N/A"
+            yahoo_overview = fetch_yahoo_quote_json(symbol.upper())
         except Exception as e:
-            print(f"[stock] yfinance lookup failed for {symbol}: {e}")
-            overview = {
-                "Name": symbol.upper(),
-                "Symbol": symbol.upper(),
-                "Sector": "ETF" if symbol.upper().endswith("X") else "N/A",
-                "MarketCapitalization": "N/A",
-                "PERatio": "N/A",
-                "EPS": "N/A",
-                "DividendYield": "N/A",
-                "revenue": "N/A",
-                "net_income": "N/A",
-            }
+            print(f"[stock] Yahoo overview fetch failed for {symbol}: {e}")
+            yahoo_overview = {}
+        
+        try:
+            tk_info = yf.Ticker(symbol.upper()).info or {}
+        except Exception as e:
+            print(f"[stock] yfinance info fetch failed for {symbol}: {e}")
+            tk_info = {}
 
-        summary = generate_ai_summary(overview)
-        fin_summary = interpret_financials(overview)
+        # Determine if ETF and set sector accordingly
+        is_etf = tk_info.get('quoteType') == 'ETF'
+        sector_value = 'ETF' if is_etf else tk_info.get('sector', '-')
+
+        # Generate AI summary, but handle Redis connection issues gracefully
+        try:
+            summary = generate_ai_summary(yahoo_overview, symbol)
+        except RedisConnectionError as e:
+            print(f"[stock] Redis connection unavailable for summary: {e}")
+            summary = ""
+        except Exception as e:
+            print(f"[stock] summary generation error: {e}")
+            summary = ""
+
+        # Interpret financials, handle Redis issues
+        try:
+            fin_summary = interpret_financials(yahoo_overview)
+        except RedisConnectionError as e:
+            print(f"[stock] Redis connection unavailable for financial interpretation: {e}")
+            fin_summary = []
+        except Exception as e:
+            print(f"[stock] financial interpretation error: {e}")
+            fin_summary = []
 
         category_tags = []
         if 'pays_dividends' in fin_summary:
@@ -131,11 +120,10 @@ def get_stock_data(symbol):
 
         response_data = {
             "symbol": symbol.upper(),
-            "name": overview["Name"],
-            "sector": overview["Sector"],
-            "market_cap": overview["MarketCapitalization"],
-            "pe_ratio": overview["PERatio"],
-            "eps": overview["EPS"],
+            "name": tk_info.get("longName", symbol.upper()),
+            "sector": sector_value,
+            "market_cap": tk_info.get("marketCap", "-"),
+            "pe_ratio": tk_info.get("trailingPE", "-"),
             "ai_summary": summary,
             "categoryTags": category_tags,
             "news": news,
@@ -144,10 +132,18 @@ def get_stock_data(symbol):
             "low": low_price,
             "close": close_price,
             "volume": format_large_number(volume),
-            "change": round(close_price - open_price, 2) if isinstance(open_price, (int, float)) and isinstance(close_price, (int, float)) else "N/A",
-            "percent_change": f"{round(((close_price - open_price) / open_price) * 100, 2)}%" if isinstance(open_price, (int, float)) and open_price != 0 else "N/A",
-            "revenue": overview.get("revenue"),
-            "net_income": overview.get("net_income"),
+            "change": (
+                round(close_price - open_price, 2)
+                if isinstance(open_price, (int, float)) and isinstance(close_price, (int, float))
+                else "-"
+            ),
+            "percent_change": (
+                f"{round(((close_price - open_price) / open_price) * 100, 2)}%"
+                if isinstance(open_price, (int, float)) and open_price != 0 and isinstance(close_price, (int, float))
+                else "-"
+            ),
+            # Merge Yahoo overview fields into the response
+            **yahoo_overview,
         }
 
         return jsonify(response_data)
