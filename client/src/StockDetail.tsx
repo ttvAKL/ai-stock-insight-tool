@@ -52,6 +52,18 @@ const granularities = ['1min', '5min', '30min', '1h', '1d'];
 
 const StockDetail: React.FC = () => {
   const { symbol } = useParams<{ symbol: string }>();
+  const [theme, setTheme] = useState<'light' | 'dark'>(
+    document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    });
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
   const [stock, setStock] = useState<StockData | null>(null);
   const [error, setError] = useState('');
   const [selectedGranularity, setSelectedGranularity] = useState('1min');
@@ -128,13 +140,13 @@ const StockDetail: React.FC = () => {
       width: chartContainerRef.current.clientWidth,
       height: 384,
       layout: {
-        background: { color: '#ffffff' },
-        textColor: '#000',
+        background: { color: theme === 'dark' ? '#1e1e1e' : '#ffffff' },
+        textColor: theme === 'dark' ? '#d4d4d4' : '#000',
         attributionLogo: false,
       },
       grid: {
-        vertLines: { color: '#eee' },
-        horzLines: { color: '#eee' },
+        vertLines: { color: theme === 'dark' ? '#2c2c2c' : '#eee' },
+        horzLines: { color: theme === 'dark' ? '#2c2c2c' : '#eee' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -176,9 +188,6 @@ const StockDetail: React.FC = () => {
     seriesData.current = transformed;
     candleSeries.setData(transformed);
 
-    console.log("[Socket Setup] Listening for updates...");
-    // Tell the server we want live updates for this symbol
-    socket.emit('subscribe', symbol);
     // Temporary wildcard debug
     socket.onAny((event, ...args) => {
       console.log(`[Socket DEBUG] Event: ${event}`, ...args);
@@ -289,12 +298,32 @@ const StockDetail: React.FC = () => {
       chartRef.current = null;
       resizeObserver.disconnect();
       chart.remove();
-      // Unsubscribe from live updates
-      socket.emit('unsubscribe', symbol);
-      socket.off("update");
       chart.timeScale().unsubscribeVisibleTimeRangeChange(timeRangeHandler);
     };
-  }, [historyCache, selectedGranularity, symbol]);
+  }, [historyCache, selectedGranularity, symbol, theme]);
+
+  // --- Live‑updates subscription ---
+  useEffect(() => {
+    if (!symbol) return;
+
+    const joinRoom = () => {
+      console.log("[Socket] Subscribing to", symbol);
+      socket.emit("subscribe", symbol);
+    };
+
+    // If already connected (hot reload / fast nav), join immediately
+    if (socket.connected) joinRoom();
+
+    // Otherwise join right after the handshake
+    socket.on("connect", joinRoom);
+
+    return () => {
+      console.log("[Socket] Unsubscribing from", symbol);
+      socket.emit("unsubscribe", symbol);
+      socket.off("connect", joinRoom);
+      socket.off("update");               // keep things tidy
+    };
+  }, [symbol]);
 
   if (error) return <p className="text-red-500 p-4">{error}</p>;
   if (isLoading || !stock) return <p className="p-4">Loading...</p>;
@@ -321,14 +350,16 @@ const StockDetail: React.FC = () => {
 
   return (
     <div
-      className="w-full max-w-8xl mx-auto p-6 bg-white shadow-md rounded-lg mt-6"
+      className={`w-full max-w-8xl mx-auto p-6 shadow-md rounded-lg mt-6 ${
+        theme === 'dark' ? 'bg-[#1e1e1e] text-[#e0e0e0]' : 'bg-white text-gray-900'
+      }`}
       style={{ minWidth: `${Math.min(windowWidth, 1536)}px` }}
     >
-      <h1 className="text-3xl font-bold mb-2">{stock.name || stock.symbol}</h1>
-      <p className="text-sm text-gray-500 mb-4">Sector: {stock.sector || '-'}</p>
+      <h1 className={`text-3xl font-bold mb-2 ${theme === 'dark' ? 'text-[#e0e0e0]' : ''}`}>{stock.name || stock.symbol}</h1>
+      <p className={`text-sm mb-4 ${theme === 'dark' ? 'text-[#b0b0b0]' : 'text-gray-500'}`}>Sector: {stock.sector || '-'}</p>
 
       {marketStatus === 'closed' && (
-        <div className="bg-yellow-100 text-yellow-800 p-2 rounded mb-4 text-sm">
+        <div className={`${theme === 'dark' ? 'bg-[#333] text-[#e0e0e0]' : 'bg-yellow-100 text-yellow-800'} p-2 rounded mb-4 text-sm`}>
           ⚠️ The stock market is currently closed. Showing latest available data.
         </div>
       )}
@@ -339,7 +370,20 @@ const StockDetail: React.FC = () => {
           <button
             key={g}
             onClick={() => setSelectedGranularity(g)}
-            className={`px-3 py-1 rounded ${selectedGranularity === g ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}
+            className={`px-3 py-1 rounded ${
+              selectedGranularity === g
+                ? (theme === 'dark'
+                  ? 'bg-[#333] text-[#e0e0e0]'
+                  : 'bg-gray-800 text-white')
+                : (theme === 'dark'
+                  ? 'bg-[#2a2a2a] text-[#a0a0a0]'
+                  : 'bg-gray-200 text-gray-600')
+            }`}
+            style={{
+                outline: 'none',
+                boxShadow: 'none',
+                border: 'none',
+            }}
           >
             {g}
           </button>
@@ -347,7 +391,7 @@ const StockDetail: React.FC = () => {
       </div>
 
       {/* Stock Chart */}
-      <div ref={chartContainerRef} className="h-96 bg-white mb-6" />
+      <div ref={chartContainerRef} className={`h-96 ${theme === 'dark' ? 'bg-[#1e1e1e]' : 'bg-white'} mb-6`} />
 
       {/* Stock Stats including Yahoo overview metrics */}
       <div
@@ -357,16 +401,20 @@ const StockDetail: React.FC = () => {
         {metrics.map(([label, value]) => (
           <div
             key={label}
-            className="bg-gray-50 p-3 rounded-lg shadow-sm cursor-pointer relative"
+            className={`p-3 rounded-lg shadow-sm cursor-pointer relative border-none ${
+              theme === 'dark'
+                ? 'bg-[#222] hover:bg-[#2a2a2a]'
+                : 'bg-gray-50 hover:bg-gray-100'
+            }`}
             onClick={e => { e.stopPropagation(); setExpandedMetric(expandedMetric === label ? null : label); }}
           >
-            <p className="text-sm text-gray-600">
+            <p className={`text-sm ${theme === 'dark' ? 'text-[#b0b0b0]' : 'text-gray-600'}`}>
               {label}
             </p>
-            <p className="text-lg font-medium text-gray-900">{value != null ? value : '-'}</p>
+            <p className={`text-lg font-medium ${theme === 'dark' ? 'text-[#e0e0e0]' : 'text-gray-900'}`}>{value != null ? value : '-'}</p>
             <div
               className={
-                `mt-2 text-sm text-gray-700 bg-white p-2 border border-gray-200 rounded shadow-lg absolute top-full left-0 w-full z-10
+                `mt-2 text-sm ${theme === 'dark' ? 'text-[#b0b0b0] bg-[#2a2a2a] border-[#333]' : 'text-gray-700 bg-white border-gray-200'} p-2 border rounded shadow-lg absolute top-full left-0 w-full z-10
                 transform transition-all duration-200 ease-out
                 ${expandedMetric === label ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}`
               }
@@ -379,16 +427,16 @@ const StockDetail: React.FC = () => {
 
       {stock.description && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Company Overview</h2>
-          <p className="text-sm text-gray-700">{stock.description}</p>
+          <h2 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-[#e0e0e0]' : 'text-gray-800'}`}>Company Overview</h2>
+          <p className={`text-sm ${theme === 'dark' ? 'text-[#b0b0b0]' : 'text-gray-700'}`}>{stock.description}</p>
         </div>
       )}
 
       {/* Key Insights */}
       {stock.ai_summary && stock.ai_summary.length > 0 && (
         <div className="mt-6">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Key Insights</h2>
-          <ul className="list-disc list-inside text-gray-700 space-y-1 pl-4">
+          <h2 className={`text-lg font-semibold mb-3 ${theme === 'dark' ? 'text-[#e0e0e0]' : 'text-gray-800'}`}>Key Insights</h2>
+          <ul className={`list-disc list-inside space-y-1 pl-4 ${theme === 'dark' ? 'text-[#b0b0b0]' : 'text-gray-700'}`}>
             {stock.ai_summary.map((point, idx) => (
               <li key={idx} className="text-sm leading-snug">{point}</li>
             ))}
@@ -397,19 +445,19 @@ const StockDetail: React.FC = () => {
       )}
 
       {stock.news && stock.news.length > 0 && (
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Recent News</h2>
+        <div className={`${theme === 'dark' ? 'bg-[#1e1e1e] border-[#333] text-[#b0b0b0]' : 'bg-gray-50 border-gray-200 text-gray-800'} mt-6 p-4 rounded-lg border shadow-sm`}>
+          <h2 className={`text-lg font-semibold mb-3 ${theme === 'dark' ? 'text-[#e0e0e0]' : 'text-gray-800'}`}>Recent News</h2>
           <ul className="space-y-3">
             {stock.news.map((item, idx) => (
               <li key={idx} className="text-sm">
-                <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
+                <a href={item.url} target="_blank" rel="noopener noreferrer" className={`${theme === 'dark' ? 'text-[#e0e0e0]' : 'text-blue-600'} font-medium hover:underline`}>
                   {item.title}
                 </a>
-                <p className="text-gray-600">{item.summary}</p>
+                <p className={`${theme === 'dark' ? 'text-[#b0b0b0]' : 'text-gray-600'}`}>{item.summary}</p>
                 <span className={`text-xs rounded-full px-2 py-0.5 inline-block mt-1 ${
-                  item.sentiment === 'Positive' ? 'bg-green-100 text-green-700' :
-                  item.sentiment === 'Negative' ? 'bg-red-100 text-red-700' :
-                  'bg-gray-100 text-gray-700'
+                  item.sentiment === 'Positive' ? (theme === 'dark' ? 'bg-[#263e29] text-[#b7ffb0]' : 'bg-green-100 text-green-700') :
+                  item.sentiment === 'Negative' ? (theme === 'dark' ? 'bg-[#3e2626] text-[#ffb0b0]' : 'bg-red-100 text-red-700') :
+                  (theme === 'dark' ? 'bg-[#2a2a2a] text-[#b0b0b0]' : 'bg-gray-100 text-gray-700')
                 }`}>
                   {item.sentiment}
                 </span>

@@ -1,14 +1,11 @@
 import os, requests
 from dotenv import load_dotenv, find_dotenv
-from services.google_finance import get_google_financials
 
 load_dotenv(find_dotenv())
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
 
 def is_valid_symbol(symbol: str) -> bool:
-    """Return True if symbol has OHLC data via Polygon and financials via Google."""
     sym = symbol.upper()
-    # 1) OHLC check via Polygon v2 prev endpoint
     try:
         url = f"https://api.polygon.io/v2/aggs/ticker/{sym}/prev"
         resp = requests.get(url, params={"apiKey": POLYGON_API_KEY})
@@ -17,14 +14,6 @@ def is_valid_symbol(symbol: str) -> bool:
             return False
     except Exception:
         return False
-    # 2) Financials check via Google Finance scraper
-    try:
-        fin = get_google_financials(sym)
-        if not fin:
-            return False
-    except Exception:
-        return False
-    return True
 
 def get_overview_if_valid(symbol: str):
     """Return {'symbol': sym, 'name': name} if valid, else None."""

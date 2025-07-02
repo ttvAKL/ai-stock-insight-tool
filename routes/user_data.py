@@ -26,15 +26,22 @@ def update_user_data():
         return jsonify({"error": "Unauthorized"}), 401
 
     data = request.get_json()
+    theme = data.get("theme")
 
     investor_profile = data.get("profile")
-    watchlist = data.get("watchlist")
+    incoming_watchlist = data.get("watchlist") or []
+
+    existing_profile = UserProfile.query.filter_by(email=email).first()
+    existing_watchlist = existing_profile.watchlist_symbols if existing_profile else []
+
+    merged_watchlist = list(set((existing_watchlist or []) + incoming_watchlist))
 
     try:
         merged_profile = UserProfile(
             email=email,
             investor_profile=investor_profile,
-            watchlist_symbols=watchlist
+            watchlist_symbols=merged_watchlist,
+            theme=theme or existing_profile.theme if existing_profile else None
         )
         db.session.merge(merged_profile)
 

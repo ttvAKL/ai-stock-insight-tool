@@ -19,6 +19,7 @@ interface StockCardProps {
   };
   isInWatchlist?: boolean;
   onToggleWatchlist?: () => void;
+  theme?: 'light' | 'dark';
 }
 
 type OhlcMessage = {
@@ -56,7 +57,7 @@ const AnimatedValue: React.FC<{ value: number; prevValue: number }> = ({ value, 
   );
 };
 
-const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatchlist }) => {
+const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatchlist, theme }) => {
   const [expanded, setExpanded] = useState(false);
 
   const [ohlc, setOhlc] = useState({
@@ -190,7 +191,9 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
   }, [data.symbol, ohlc]);
 
   return (
-    <div className="relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[330px] bg-white rounded-lg shadow-lg group/card">
+    <div className={`relative mt-8 p-6 min-w-1000px max-w-md w-full min-h-[330px] rounded-lg shadow-lg group/card ${
+      theme === 'dark' ? 'bg-[#1e1e1e] text-gray-200' : 'bg-white text-black'
+    }`}>
       {onToggleWatchlist && (
         <button
           onClick={(e) => {
@@ -227,23 +230,29 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
           {data.categoryTags?.map((tag, index) => (
             <span
               key={index}
-              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full font-medium"
+              className={`px-2 py-1 text-xs rounded-full font-medium ${
+                theme === 'dark'
+                  ? 'bg-[#2a2a2a] text-sky-200'
+                  : 'bg-blue-100 text-blue-700'
+              }`}
             >
               {tag}
             </span>
           ))}
         </div>
       )}
-      <Link to={`/stock/${data.symbol}`} className="block h-full">
-        <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+      <Link to={`/stock/${data.symbol}`} className={`block h-full ${theme === 'dark' ? 'text-gray-200' : 'text-black'}`}>
+        <h2 className={`text-2xl font-semibold mb-4 flex items-center gap-2 ${theme === 'dark' ? 'text-gray-100' : 'text-black'}`}>
           {data.symbol}
           {data.source === 'recommended' && (
-            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded font-medium">
+            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+              theme === 'dark' ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700'
+            }`}>
               Recommended
             </span>
           )}
         </h2>
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className={`grid grid-cols-2 gap-4 mb-6 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-700'}`}>
           <div className="flex flex-col">
             <span className="font-semibold">Open:</span>
             <AnimatedValue value={ohlc.open} prevValue={prevOhlc.open} />
@@ -288,7 +297,7 @@ const StockCard: React.FC<StockCardProps> = ({ data, isInWatchlist, onToggleWatc
               </span>
             </button>
             {expanded && (
-              <ul className="list-disc pl-5 text-gray-700 space-y-1">
+              <ul className={`list-disc pl-5 space-y-1 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
                 {data.ai_summary.map((point, idx) => (
                   <li key={idx} className="text-sm leading-snug">{point}</li>
                 ))}

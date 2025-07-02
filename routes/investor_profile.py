@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 import requests
 import os
+from flask_cors import cross_origin
 
 profile_bp = Blueprint("investor_profile", __name__)
 
@@ -13,7 +14,11 @@ INVESTOR_TYPES = [
 ]
 
 @profile_bp.route("/api/investor-profile", methods=["POST"])
+@cross_origin(origins="http://localhost:5173", supports_credentials=True)
 def classify_investor():
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     data = request.get_json()
     answers = data.get("answers")
 

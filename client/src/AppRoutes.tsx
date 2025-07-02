@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Home from './Home';
-import ProfileSetup from './ProfileSetup';
+import Profile from './Profile';
 import OnboardingWelcome from './OnboardingWelcome';
-import OnboardingComplete from './OnboardingComplete';
 import StockDetail from './StockDetail';
 
-const AppRoutes: React.FC = () => {
+interface AppRoutesProps {
+  theme: 'light' | 'dark';
+}
+
+const AppRoutes: React.FC<AppRoutesProps> = ({ theme }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [loading, setLoading] = React.useState(true);
@@ -29,15 +32,19 @@ const AppRoutes: React.FC = () => {
         const res = await fetch("http://localhost:3000/api/user-data", {
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`   // ← this is what was missing
+            "Authorization": `Bearer ${token}`
           }
         });
         const data = await res.json();
 
+        if (res.status === 401 && data.error === "token_expired") {
+          window.location.href = "http://localhost:3000/api/login/google";
+          return;
+        }
+
         if (data.profile) {
           localStorage.setItem("investorProfile", data.profile.type);
           localStorage.setItem("investorProfileFull", JSON.stringify(data.profile));
-          // No redirect needed; user can access app normally
         } else if (location.pathname !== "/profile") {
           navigate("/profile");
         }
@@ -63,10 +70,9 @@ const AppRoutes: React.FC = () => {
 
   return (
     <Routes>
-      <Route path='/' element={<Home />} />
-      <Route path='/profile' element={<ProfileSetup />} />
-      <Route path='/onboarding' element={<OnboardingWelcome />} />
-      <Route path='/onboarding/complete' element={<OnboardingComplete />} />
+      <Route path='/' element={<Home theme={theme} />} />
+      <Route path='/profile' element={<Profile theme={theme} />} />
+      <Route path='/onboarding' element={<OnboardingWelcome theme={theme}/>} />
       <Route path='/stock/:symbol' element={<StockDetail />} />
     </Routes>
   );

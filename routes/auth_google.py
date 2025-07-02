@@ -23,7 +23,6 @@ def register_oauth(app):
 
 @auth_bp.route('/auth/google')
 def login():
-    print('def login hit!')
     redirect_uri = url_for('auth.auth_callback', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
 
@@ -36,6 +35,7 @@ def auth_callback():
         session["user"] = user_info
 
         jwt_token = generate_jwt_token(user_info)
+        print(jwt_token)
         existing_profile = UserProfile.query.filter_by(email=user_info["email"]).first()
         if existing_profile:
             return redirect(f"http://localhost:5173/?token={jwt_token}")

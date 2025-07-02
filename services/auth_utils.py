@@ -23,6 +23,10 @@ def get_jwt_email():
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload.get("email")
+    except jwt.ExpiredSignatureError:
+        print("[user_data] JWT has expired")
+        from flask import jsonify
+        return jsonify({"error": "token_expired"}), 401
     except jwt.InvalidTokenError as e:
         print(f"[user_data] JWT decode error: {e}")
         return None

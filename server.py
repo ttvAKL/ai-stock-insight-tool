@@ -4,10 +4,11 @@ from flask_cors import CORS
 from dotenv import load_dotenv, find_dotenv
 import threading
 from redis import Redis
+import requests
 from rq import Queue
-from jobs.tasks import fetch_and_cache_symbol
 from routes.stock import stock_bp
 from routes.user_data import user_data_bp
+from routes.investor_profile import profile_bp
 import json
 from flask_socketio import SocketIO
 from services.polygon_proxy import (
@@ -18,16 +19,22 @@ from services.polygon_proxy import (
 )
 from routes.auth_google import auth_bp, register_oauth
 from db import db
+from flask_migrate import Migrate
 
 load_dotenv(find_dotenv())
 app = Flask(__name__)
-# Load secret key for session signing
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
-# Configure the database
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')  # or your specific env var
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Bind SQLAlchemy to this app
 db.init_app(app)
+migrate = Migrate(app, db)
+
+register_oauth(app)
+app.register_blueprint(auth_bp)
+app.register_blueprint(stock_bp)
+app.register_blueprint(user_data_bp)
+app.register_blueprint(profile_bp)
+
 # Enable CORS for React dev server with credentials support
 CORS(
     app,
@@ -41,15 +48,6 @@ socketio = SocketIO(
     cors_allowed_origins=["http://localhost:5173"],
     async_mode="eventlet"
 )
-
-# Load routes
-
-# Configure Google OAuth routes
-register_oauth(app)
-app.register_blueprint(auth_bp)
-app.register_blueprint(stock_bp)
-app.register_blueprint(user_data_bp)
-
 
 with open("client/src/StarterPacks.ts", "r") as f:
     content = f.read()
@@ -67,6 +65,13 @@ try:
 except Exception as e:
     print(f"⚠️ Redis not available: {e}")
     q = None
+
+def fetch_and_cache_symbol(symbol):
+    try:
+        print(f"Worker fetching {symbol}")
+        requests.get(f"http://127.0.0.1:3000/api/stock/{symbol}")
+    except Exception as e:
+        print(f"Worker failed to fetch {symbol}: {e}")
 
 def delayed_prefetch():
     import time

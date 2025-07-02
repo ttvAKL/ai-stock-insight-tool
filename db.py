@@ -12,3 +12,4 @@ class UserProfile(db.Model):
     email = db.Column(db.String(120), primary_key=True)
     investor_profile = db.Column(db.JSON, nullable=True)
     watchlist_symbols = db.Column(db.JSON, nullable=True)
+    theme = db.Column(db.String, nullable=True)

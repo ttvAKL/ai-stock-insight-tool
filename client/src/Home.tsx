@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import './index.css'; // or a global CSS file if using one
+import './index.css';
 import StockCard from './StockCard';
 import SearchBar from './SearchBar';
 import STARTER_PACKS from './StarterPacks';
@@ -34,11 +34,10 @@ const getRecommendedTickers = (): string[] => {
   }
 };
 
-const Home: React.FC = () => {
+const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0]);
   const [categoryStocks, setCategoryStocks] = useState<StockData[]>([]);
-  // Persistent watchlist symbols in localStorage, prefill with recommended stocks
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>(() => {
     const saved = localStorage.getItem('watchlistSymbols');
     const stored = saved ? JSON.parse(saved) : [];
@@ -262,10 +261,14 @@ const Home: React.FC = () => {
     : categoryStocks;
 
   return (
-    <div className="min-h-screen bg-gray-100 p-12 flex flex-col justify-start items-center">
+    <div className={`min-h-screen p-12 flex flex-col justify-start items-center ${
+      theme === 'dark'
+        ? 'bg-[#262626] text-gray-200 shadow-[0_1px_4px_rgba(0,0,0,0.6)]'
+        : 'bg-white text-black shadow-lg'
+    }`}>
       <div className="w-full max-w-7xl text-center">
-        <h1 className="text-4xl font-bold mb-8">AI Stock Insight Tool</h1>
-        <SearchBar onSearch={handleSearch} />
+        <h1 className="text-4xl font-bold mb-8">MoneyMind Stock Insight Tool</h1>
+        <SearchBar theme={theme} onSearch={handleSearch} />
         <div
           className={`fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-100 text-green-800 px-4 py-2 rounded shadow-md text-sm z-50 transition-opacity duration-500 ${
             showWatchlistNotice ? 'opacity-100' : 'opacity-0'
@@ -289,9 +292,18 @@ const Home: React.FC = () => {
             onClick={() => setActiveCategory(cat)}
             className={`px-4 py-2 rounded-full border ${
               activeCategory === cat
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-500 border-gray-300'
+                ? theme === 'dark'
+                  ? 'bg-black text-white border-gray-600'
+                  : 'bg-black text-white border-blue-600'
+                : theme === 'dark'
+                  ? 'bg-gray-950 text-gray-400 border-[#3a3a3a]'
+                  : 'bg-gray-950 text-gray-500 border-gray-300'
             } hover:shadow`}
+            style={{
+                outline: 'none',
+                boxShadow: 'none',
+                border: 'none',
+            }}
           >
             {cat}
           </button>
@@ -301,11 +313,15 @@ const Home: React.FC = () => {
       <div className="mt-12 w-full min-w-1000px max-w-8xl px-4 flex justify-center"
         style={{ minWidth: `${windowWidth - 95}px` }}>
         {loading ? (
-          <div className="h-52 flex items-center justify-center text-gray-500 text-lg font-medium">
+          <div className={`h-52 flex items-center justify-center text-lg font-medium ${
+            theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
+          }`}>
             Loading stock data...
           </div>
         ) : stocksToDisplay.length === 0 ? (
-          <div className="h-52 flex items-center justify-center text-gray-500 text-lg font-medium">
+          <div className={`h-52 flex items-center justify-center text-lg font-medium ${
+            theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
+          }`}>
             No stocks found in this category.
           </div>
         ) : (
@@ -331,6 +347,7 @@ const Home: React.FC = () => {
                     data={stock as Required<StockData>}
                     isInWatchlist={watchlistSymbols.includes(stock.symbol)}
                     onToggleWatchlist={() => toggleWatchlist(stock.symbol)}
+                    theme={theme}
                   />
                 </motion.div>
               ))}
