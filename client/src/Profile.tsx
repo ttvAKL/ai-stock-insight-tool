@@ -84,7 +84,7 @@ const Profile: React.FC<{ theme: "light" | "dark" }> = ({ theme }) => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:3000/api/investor-profile", {
+      const response = await fetch("${import.meta.env.VITE_API_URL}/api/investor-profile", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -99,7 +99,7 @@ const Profile: React.FC<{ theme: "light" | "dark" }> = ({ theme }) => {
       setProfile(data);
       localStorage.setItem("investorProfile", data.type);
       localStorage.setItem("investorProfileFull", JSON.stringify(data));
-      await fetch("http://localhost:3000/api/user-data", {
+      await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -29,7 +29,7 @@ const AppRoutes: React.FC<AppRoutesProps> = ({ theme }) => {
 
     const checkUserData = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/user-data", {
+        const res = await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
@@ -38,7 +38,7 @@ const AppRoutes: React.FC<AppRoutesProps> = ({ theme }) => {
         const data = await res.json();
 
         if (res.status === 401 && data.error === "token_expired") {
-          window.location.href = "http://localhost:3000/api/login/google";
+          window.location.href = "${import.meta.env.VITE_API_URL}/api/login/google";
           return;
         }
 

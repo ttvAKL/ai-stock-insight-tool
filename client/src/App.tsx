@@ -17,7 +17,7 @@ const App: React.FC = () => {
     if (!savedTheme) {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const defaultTheme = prefersDark ? 'dark' : 'light';
-      fetch('http://localhost:3000/api/user-data', {
+      fetch('${import.meta.env.VITE_API_URL}/api/user-data', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const handleThemeToggle = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
-    fetch('http://localhost:3000/api/user-data', {
+    fetch('${import.meta.env.VITE_API_URL}/api/user-data', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

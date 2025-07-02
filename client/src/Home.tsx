@@ -57,7 +57,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const res = await fetch("http://localhost:3000/api/user-data", { 
+        const res = await fetch("${import.meta.env.VITE_API_URL}/api/user-data", { 
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
@@ -100,7 +100,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
 
         for (const symbol of combined) {
           try {
-            const url = `http://localhost:3000/api/stock/${symbol}`;
+            const url = `${import.meta.env.VITE_API_URL}/api/stock/${symbol}`;
             const res = await fetch(url, { signal });
             const data = await res.json();
             if (!data.error) {
@@ -125,7 +125,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
       const results: StockData[] = [];
       for (const symbol of symbols) {
         try {
-          const url = `http://localhost:3000/api/stock/${symbol}`;
+          const url = `${import.meta.env.VITE_API_URL}/api/stock/${symbol}`;
           const res = await fetch(url, { signal });
           const data = await res.json();
           if (!data.error) {
@@ -157,7 +157,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
           localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
           // Backend sync
           (async () => {
-            await fetch("http://localhost:3000/api/user-data", {
+            await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
               method: "POST",
               credentials: 'include',
               headers: { 
@@ -180,7 +180,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
       setWatchlistSymbols(updated);
       localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
       // Backend sync
-      await fetch("http://localhost:3000/api/user-data", {
+      await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
         method: "POST",
         credentials: 'include',
         headers: { 
@@ -209,7 +209,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:3000/api/stock/${symbol}`);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stock/${symbol}`);
       const data = await res.json();
       if (!data.error) {
         // Trigger AI summary generation
@@ -219,7 +219,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
           setWatchlistSymbols(newWatchlist);
           localStorage.setItem('watchlistSymbols', JSON.stringify(newWatchlist));
           // Backend sync
-          await fetch("http://localhost:3000/api/user-data", {
+          await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
             method: "POST",
             credentials: 'include',
             headers: { 
@@ -240,7 +240,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
         }
 
         try {
-          await fetch(`http://localhost:3000/api/stock/${symbol}/generate-summary`, { method: 'POST' });
+          await fetch(`${import.meta.env.VITE_API_URL}/api/stock/${symbol}/generate-summary`, { method: 'POST' });
         } catch (summaryError) {
           console.error(`Failed to generate summary for ${symbol}`, summaryError);
         }

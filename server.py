@@ -134,5 +134,4 @@ subscribe_callback(forward_polygon_update)
 if __name__ == '__main__':
     threading.Thread(target=delayed_prefetch).start()
     threading.Thread(target=run_polygon_proxy, daemon=True).start()
-    print("server.py started at localhost:3000")
     socketio.run(app, host='localhost', port=3000)
