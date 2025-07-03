@@ -14,8 +14,9 @@ INVESTOR_TYPES = [
 ]
 
 @profile_bp.route("/api/investor-profile", methods=["POST", "OPTIONS"])
-@cross_origin(origins="money-mind.org", supports_credentials=True)
+@cross_origin(origins=["https://money-mind.org", "http://localhost:5173"], supports_credentials=True)
 def classify_investor():
+    print("[DEBUG] /api/investor-profile route hit")
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
 
@@ -56,6 +57,7 @@ Important: The recommended_stocks list must include only ETFs that are supported
 """
 
     try:
+        print("[DEBUG] Sending prompt to OpenRouter")
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
@@ -70,6 +72,8 @@ Important: The recommended_stocks list must include only ETFs that are supported
             }
         )
 
+        print("[DEBUG] Response from OpenRouter:", response.text)
+
         if response.status_code != 200:
             print("[OpenRouter Error]", response.text)
             return jsonify({"error": "AI processing failed"}), 500
@@ -81,5 +85,5 @@ Important: The recommended_stocks list must include only ETFs that are supported
 
         return jsonify(parsed)
     except Exception as e:
-        print("[OpenRouter Error]", e)
+        print("[OpenRouter Exception]", e)
         return jsonify({"error": "AI processing failed"}), 500
