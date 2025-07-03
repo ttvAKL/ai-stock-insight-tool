@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import os
 from services.auth_utils import generate_jwt_token
 from db import UserProfile
+import traceback
+
 
 load_dotenv()
 auth_bp = Blueprint("auth", __name__)
@@ -40,9 +42,10 @@ def auth_callback():
         print(jwt_token)
         existing_profile = UserProfile.query.filter_by(email=user_info["email"]).first()
         if existing_profile:
-            return redirect(f"http://money-mind.org/?token={jwt_token}")
+            return redirect(f"https://money-mind.org/?token={jwt_token}")
         else:
-            return redirect(f"http://money-mind.org/profile?token={jwt_token}")
+            return redirect(f"https://money-mind.org/profile?token={jwt_token}")
     except Exception as e:
         print(f"[OAuth Error] {e}")
+        traceback.print_exc()
         return "Authentication failed", 500
