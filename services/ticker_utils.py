@@ -49,4 +49,5 @@ def get_ticker_suggestions(query: str, limit: int = 10):
             suggestions.append({"symbol": sym, "name": entry.get("name", "")})
     except Exception:
         pass
+    print("Returning suggestions:", suggestions)
     return suggestions
