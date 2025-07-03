@@ -1,5 +1,10 @@
 import os
-from flask import Flask, request, jsonify
+os.environ["EVENTLET_NO_GREENDNS"] = "yes"
+
+import eventlet
+eventlet.monkey_patch()  
+
+from flask import Flask, request
 from flask_cors import CORS
 from dotenv import load_dotenv, find_dotenv
 import threading
