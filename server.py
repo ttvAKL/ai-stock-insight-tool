@@ -40,6 +40,14 @@ app.register_blueprint(stock_bp)
 app.register_blueprint(user_data_bp)
 app.register_blueprint(profile_bp)
 
+@app.route("/ping")
+def ping():
+    try:
+        result = db.session.execute("SELECT 1").scalar()
+        return f"✅ DB responded: {result}", 200
+    except Exception as e:
+        return f"❌ DB error: {e}", 500
+
 # Enable CORS for React dev server with credentials support
 CORS(
     app,
