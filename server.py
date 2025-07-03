@@ -21,6 +21,8 @@ from routes.auth_google import auth_bp, register_oauth
 from db import db
 from flask_migrate import Migrate
 
+API_BASE = os.getenv("VITE_API_URL", "http://127.0.0.1:3000")
+
 load_dotenv(find_dotenv())
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
@@ -39,13 +41,13 @@ app.register_blueprint(profile_bp)
 CORS(
     app,
     supports_credentials=True,
-    origins=["http://localhost:5173"],
+    origins=["https://money-mind.org", "http://localhost:5173"],
     methods=["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
     allow_headers=["Content-Type","Authorization"]
 )
 socketio = SocketIO(
     app,
-    cors_allowed_origins=["http://localhost:5173"],
+    cors_allowed_origins=["https://money-mind.org", "http://localhost:5173"],
     async_mode="eventlet"
 )
 
@@ -66,12 +68,13 @@ except Exception as e:
     print(f"⚠️ Redis not available: {e}")
     q = None
 
-def fetch_and_cache_symbol(symbol):
+def fetch_and_cache_symbol(symbol: str):
+    url = f"{API_BASE}/api/stock/{symbol}"
     try:
-        print(f"Worker fetching {symbol}")
-        requests.get(f"http://127.0.0.1:3000/api/stock/{symbol}")
+        print("Worker fetching", symbol, "→", url)
+        requests.get(url, timeout=10)
     except Exception as e:
-        print(f"Worker failed to fetch {symbol}: {e}")
+        print("Worker failed:", e)
 
 def delayed_prefetch():
     import time

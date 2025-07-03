@@ -38,9 +38,9 @@ def auth_callback():
         print(jwt_token)
         existing_profile = UserProfile.query.filter_by(email=user_info["email"]).first()
         if existing_profile:
-            return redirect(f"http://localhost:5173/?token={jwt_token}")
+            return redirect(f"http://money-mind.org/?token={jwt_token}")
         else:
-            return redirect(f"http://localhost:5173/profile?token={jwt_token}")
+            return redirect(f"http://money-mind.org/profile?token={jwt_token}")
     except Exception as e:
         print(f"[OAuth Error] {e}")
         return "Authentication failed", 500

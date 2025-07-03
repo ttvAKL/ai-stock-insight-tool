@@ -14,7 +14,7 @@ INVESTOR_TYPES = [
 ]
 
 @profile_bp.route("/api/investor-profile", methods=["POST"])
-@cross_origin(origins="http://localhost:5173", supports_credentials=True)
+@cross_origin(origins="money-mind.org", supports_credentials=True)
 def classify_investor():
     if request.method == "OPTIONS":
         return jsonify({"status": "ok"}), 200
