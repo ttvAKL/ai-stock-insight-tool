@@ -100,7 +100,7 @@ const StockDetail: React.FC = () => {
   useEffect(() => {
     const fetchAllGranularities = async () => {
       try {
-        const metaRes = await fetch(`/api/stock/${symbol}`);
+        const metaRes = await fetch(`${import.meta.env.VITE_API_URL}/api/stock/${symbol}`);
         const meta = await metaRes.json();
 
         if (!meta.error) {
@@ -108,7 +108,7 @@ const StockDetail: React.FC = () => {
         }
 
         const historyRequests = granularities.map(async (g) => {
-          const r = await fetch(`/api/stock/${symbol}/history?granularity=${g}&full=true`);
+          const r = await fetch(`${import.meta.env.VITE_API_URL}/api/stock/${symbol}/history?granularity=${g}&full=true`);
           const d = await r.json();
           return [g, d];
         });
@@ -245,7 +245,7 @@ const StockDetail: React.FC = () => {
 
       isFetching = true;
       try {
-        const res = await fetch(`/api/stock/${symbol}/history?granularity=${selectedGranularity}&from=${from}&to=${to}`);
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stock/${symbol}/history?granularity=${selectedGranularity}&from=${from}&to=${to}`);
         const data = await res.json();
 
         if (Array.isArray(data)) {
