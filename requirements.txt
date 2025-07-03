@@ -9,3 +9,5 @@ redis
 rq
 PyJWT
 flask-socketio
+gunicorn
+eventlet
