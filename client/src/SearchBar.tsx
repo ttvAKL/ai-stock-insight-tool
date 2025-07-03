@@ -17,7 +17,7 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearch, theme }) => {
     const fetchSuggestions = async () => {
       if (input.length < 1) return setSuggestions([]);
       try {
-        const res = await axios.get(`/api/stock/suggest?q=${input}`);
+        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/stock/suggest?q=${input}`);
         setSuggestions(res.data || []);
       } catch (error) {
         console.error('Autocomplete error:', error);
