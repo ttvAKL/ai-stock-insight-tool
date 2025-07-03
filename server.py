@@ -1,4 +1,7 @@
 import os
+from gevent import monkey
+monkey.patch_all()
+
 from flask import Flask, request
 from flask_cors import CORS
 from dotenv import load_dotenv, find_dotenv
@@ -48,7 +51,7 @@ CORS(
 socketio = SocketIO(
     app,
     cors_allowed_origins=["https://money-mind.org", "http://localhost:5173"],
-    async_mode="eventlet"
+    async_mode="gevent"
 )
 
 with open("client/src/StarterPacks.ts", "r") as f:
