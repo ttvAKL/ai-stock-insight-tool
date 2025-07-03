@@ -57,7 +57,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const res = await fetch("${import.meta.env.VITE_API_URL}/api/user-data", { 
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/user-data`, { 
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
@@ -157,7 +157,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
           localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
           // Backend sync
           (async () => {
-            await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
+            await fetch(`${import.meta.env.VITE_API_URL}/api/user-data`, {
               method: "POST",
               credentials: 'include',
               headers: { 
@@ -180,7 +180,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
       setWatchlistSymbols(updated);
       localStorage.setItem('watchlistSymbols', JSON.stringify(updated));
       // Backend sync
-      await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
+      await fetch(`${import.meta.env.VITE_API_URL}/api/user-data`, {
         method: "POST",
         credentials: 'include',
         headers: { 
@@ -219,7 +219,7 @@ const Home: React.FC<{ theme: 'light' | 'dark' }> = ({ theme }) => {
           setWatchlistSymbols(newWatchlist);
           localStorage.setItem('watchlistSymbols', JSON.stringify(newWatchlist));
           // Backend sync
-          await fetch("${import.meta.env.VITE_API_URL}/api/user-data", {
+          await fetch(`${import.meta.env.VITE_API_URL}/api/user-data`, {
             method: "POST",
             credentials: 'include',
             headers: { 
