@@ -1,8 +1,8 @@
 import os
-os.environ["EVENTLET_NO_GREENDNS"] = "yes"
-
-import eventlet
-eventlet.monkey_patch()  
+if not os.getenv("FLASK_RUN_FROM_CLI"):
+    import eventlet
+    os.environ["EVENTLET_NO_GREENDNS"] = "yes"
+    eventlet.monkey_patch()
 
 from flask import Flask, request
 from flask_cors import CORS
@@ -35,6 +35,26 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 migrate = Migrate(app, db)
+
+# -------------------------------------------------------------
+# Automatically apply or generate migrations on each startup.
+# This lets the service create required tables even on a fresh
+# database without needing manual `flask db upgrade`.
+if os.getenv("AUTO_MIGRATE", "true").lower() == "true":
+    from flask_migrate import upgrade, stamp, migrate as fmigrate
+
+    with app.app_context():
+        try:
+            # Try to bring the database up to the latest revision.
+            upgrade()
+        except Exception:
+            # If the schema or revision table is missing, stamp the
+            # database at "base", auto‑generate an initial revision,
+            # then apply it.
+            stamp()                       # mark DB as base
+            fmigrate(message="initial")    # autogenerate revision
+            upgrade()                     # apply it
+# -------------------------------------------------------------
 
 register_oauth(app)
 app.register_blueprint(auth_bp)
