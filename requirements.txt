@@ -13,3 +13,4 @@ gunicorn
 eventlet
 Flask-SQLAlchemy
 SQLAlchemy
+authlib
