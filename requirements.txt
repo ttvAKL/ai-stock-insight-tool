@@ -15,3 +15,4 @@ Flask-SQLAlchemy
 SQLAlchemy
 authlib
 Flask-Migrate
+psycopg2
