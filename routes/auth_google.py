@@ -23,7 +23,9 @@ def register_oauth(app):
 
 @auth_bp.route('/auth/google')
 def login():
-    redirect_uri = url_for('auth.auth_callback', _external=True)
+    # Force HTTPS in the generated callback URL so that Google sees an exact
+    # match with the HTTPS redirect URI configured in the Google Cloud console.
+    redirect_uri = url_for('auth.auth_callback', _external=True, _scheme='https')
     return oauth.google.authorize_redirect(redirect_uri)
 
 @auth_bp.route('/auth/google/callback')
