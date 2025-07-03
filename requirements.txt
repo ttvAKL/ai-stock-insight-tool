@@ -10,7 +10,8 @@ rq
 PyJWT
 flask-socketio
 gunicorn
-eventlet
+gevent
+gevent-websocket 
 Flask-SQLAlchemy
 SQLAlchemy
 authlib
