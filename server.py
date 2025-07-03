@@ -1,8 +1,9 @@
 import os
 if not os.getenv("FLASK_RUN_FROM_CLI"):
-    import eventlet
     os.environ["EVENTLET_NO_GREENDNS"] = "yes"
-    eventlet.monkey_patch()
+
+    import eventlet
+    eventlet.monkey_patch(psycopg=False)
 
 from flask import Flask, request
 from flask_cors import CORS
