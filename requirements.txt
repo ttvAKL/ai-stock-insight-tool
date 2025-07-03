@@ -11,3 +11,5 @@ PyJWT
 flask-socketio
 gunicorn
 eventlet
+Flask-SQLAlchemy
+SQLAlchemy
