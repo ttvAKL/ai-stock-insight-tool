@@ -1,8 +1,16 @@
 import requests, os
+import redis
 import pickle
 from cache.redis_client import redis_conn
 from dotenv import load_dotenv, find_dotenv
 from redis.exceptions import ConnectionError as RedisConnectionError
+
+try:
+    redis_client = redis.Redis.from_url(os.getenv("REDIS_URL"), decode_responses=True)
+    redis_client.ping()
+except Exception as e:
+    print(f"[summary_generator] Redis unavailable during init: {e}")
+    redis_client = None
 
 load_dotenv(find_dotenv())
 
@@ -10,11 +18,12 @@ def generate_ai_summary(info: dict, symbol) -> list:
     api_key = os.getenv("OPENROUTER_API_KEY")
     cache_key = f"summary_{symbol}"
     try:
-        cached_summary = redis_conn.get(cache_key)
+        cached_summary = redis_client.get(cache_key)
     except RedisConnectionError as e:
         print(f"[summary_generator] Redis connection unavailable for get: {e}")
         cached_summary = None
     if cached_summary:
+        print(f"[summary_generator] Loaded cached summary for {symbol}")
         try:
             summary = pickle.loads(cached_summary)
             if summary and isinstance(summary, list):
@@ -63,9 +72,11 @@ Here is the stock data:
             return ["Summary unavailable."]
 
         try:
-            redis_conn.set(cache_key, pickle.dumps(summary_list))
+            print(f"[summary_generator] Caching summary for {symbol}")
+            redis_client.set(cache_key, pickle.dumps(summary_list))
         except RedisConnectionError as e:
             print(f"[summary_generator] Redis connection unavailable for set: {e}")
+        print(f"[summary_generator] Returning new summary for {symbol}")
         return summary_list
     except requests.exceptions.HTTPError as err:
         print(f"HTTP Error: {err.response.status_code} - {err.response.text}")
