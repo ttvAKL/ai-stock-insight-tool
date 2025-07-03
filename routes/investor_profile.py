@@ -13,7 +13,7 @@ INVESTOR_TYPES = [
     "Speculative Adventurer"
 ]
 
-@profile_bp.route("/api/investor-profile", methods=["POST"])
+@profile_bp.route("/api/investor-profile", methods=["POST", "OPTIONS"])
 @cross_origin(origins="money-mind.org", supports_credentials=True)
 def classify_investor():
     if request.method == "OPTIONS":
